@@ -362,9 +362,9 @@
         dest: "{{ jenkins_tools_dir }}/docker-cli"
         state: link
 
+
     # --------------------------------------------------------------------------
-    # Optional: ensure kubeconfig path exists on host
-    # (You can replace this with template/copy of an actual kubeconfig)
+    # Fetch kubeconfig from K8s master and configure for Jenkins
     # --------------------------------------------------------------------------
     - name: Ensure kubeconfig directory exists
       file:
@@ -375,13 +375,31 @@
         mode: '0700'
       when: kubeconfig_host_path is defined
 
-    - name: Touch kubeconfig file if missing (placeholder)
+    - name: Fetch kubeconfig from k8s master
+      slurp:
+        src: /home/ansible/.kube/config
+      register: kubeconfig_content
+      delegate_to: "{{ groups['kubernetes_master'][0] }}"
+      when: kubeconfig_host_path is defined
+
+    - name: Write kubeconfig to Jenkins server
       copy:
+        content: "{{ kubeconfig_content.content | b64decode }}"
         dest: "{{ kubeconfig_host_path }}"
-        content: ""
         owner: ansible
         group: ansible
         mode: '0600'
+      when: kubeconfig_host_path is defined
+
+    - name: Verify kubeconfig was copied successfully
+      stat:
+        path: "{{ kubeconfig_host_path }}"
+      register: kubeconfig_stat
+      when: kubeconfig_host_path is defined
+
+    - name: Display kubeconfig status
+      debug:
+        msg: "Kubeconfig copied successfully: {{ kubeconfig_stat.stat.exists }}"
       when: kubeconfig_host_path is defined
 
     # --------------------------------------------------------------------------

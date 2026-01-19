@@ -113,6 +113,11 @@
     # KUBECONFIG FOR ANSIBLE USER
     # ============================================================================
 
+    - name: Set readable permissions on k3s.yaml
+      file:
+        path: /etc/rancher/k3s/k3s.yaml
+        mode: '0644'
+
     - name: Create kubeconfig directory
       file:
         path: "{{ kubeconfig_dir }}"
