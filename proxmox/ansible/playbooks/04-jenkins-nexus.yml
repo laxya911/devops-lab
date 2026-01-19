@@ -375,12 +375,21 @@
         mode: '0700'
       when: kubeconfig_host_path is defined
 
+    - name: Debug kubeconfig variables
+      debug:
+        msg: "kubeconfig_host_path: {{ kubeconfig_host_path | default('UNDEFINED') }}"
+
     - name: Fetch kubeconfig from k8s master
       slurp:
         src: /home/ansible/.kube/config
       register: kubeconfig_content
       delegate_to: "{{ groups['kubernetes_master'][0] }}"
       when: kubeconfig_host_path is defined
+      ignore_errors: yes
+
+    - name: Debug fetched content
+      debug:
+        msg: "Fetched content length: {{ (kubeconfig_content.content | b64decode | length) if kubeconfig_content.content is defined else 'N/A' }}"
 
     - name: Write kubeconfig to Jenkins server
       copy:
@@ -389,7 +398,10 @@
         owner: ansible
         group: ansible
         mode: '0600'
-      when: kubeconfig_host_path is defined
+        force: yes
+      when: 
+        - kubeconfig_host_path is defined
+        - kubeconfig_content.content is defined
 
     - name: Verify kubeconfig was copied successfully
       stat:
@@ -419,7 +431,7 @@
           - /var/run/docker.sock:/var/run/docker.sock
           - "{{ jenkins_tools_dir }}/kubectl:/usr/local/bin/kubectl:ro"
           - "{{ jenkins_tools_dir }}/docker-cli:/usr/local/bin/docker:ro"
-          - "{{ kubeconfig_host_path }}:/home/ansible/.kube/config:ro"
+          - "{{ kubeconfig_host_path | dirname }}:/home/ansible/.kube:ro"
         networks:
           - name: cicd-network
         env:
@@ -448,6 +460,23 @@
           - "{{ nexus_data }}:/nexus-data"
         networks:
           - name: cicd-network
+
+    - name: Wait for Nexus to be available
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ jenkins_port }}"
+        timeout: 300
+
+    - name: Verify Nexus Registry is active
+      uri:
+        url: "http://{{ ansible_host }}:{{ nexus_docker_port }}/v2/"
+        status_code: 200
+      register: registry_check
+      ignore_errors: yes
+
+    - name: Display Registry Status
+      debug:
+        msg: "Registry status: {{ registry_check.status | default('FAIL') }}"
 
     - name: Wait for Nexus to be available
       wait_for:
