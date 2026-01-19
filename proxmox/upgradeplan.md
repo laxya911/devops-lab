@@ -129,12 +129,3 @@ Optional / long-term
 - Use internal CA and issue TLS certs for registry and k3s API to avoid 'insecure' registry settings.
 - Consider running Jenkins agents in Kubernetes (k3s) to scale builds and reduce resource usage on the CI VM.
 
-Next immediate actions I can take now
-
-- Implement the minimal Terraform edits: `var.ssh_user` usage and `local-exec` inventory writer.
-- Add a small `roles/user` and `roles/docker` skeleton in `ansible/roles/` and update playbooks to use `ansible_user` variable.
-
-If you'd like I will apply the Terraform/Ansible patch changes now (small, focused edits), or I can generate the Ansible role skeleton and a Jenkins pipeline snippet next. Tell me which you'd prefer me to implement first.
-
---
-Generated on 2026-01-13

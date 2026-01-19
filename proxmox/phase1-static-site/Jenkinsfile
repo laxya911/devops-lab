@@ -58,7 +58,7 @@ stage('Checkout') {
         echo '🔨 Building Docker image...'
         script {
             sh """
-                cd phase1-static-site
+                cd ${WORKSPACE}/proxmox/phase1-static-site
                 docker build -t ${FULL_IMAGE_NAME} .
                 docker tag ${FULL_IMAGE_NAME} ${NEXUS_REGISTRY}/${IMAGE_NAME}:latest
             """
@@ -96,8 +96,6 @@ stage('Checkout') {
         echo '✅ Image test passed'
     }
 }
-
-        }
         
         // ====================================================================
         // Stage 4: Push to Nexus
@@ -118,7 +116,8 @@ stage('Checkout') {
                 }
                 echo "✅ Image pushed to Nexus: ${FULL_IMAGE_NAME}"
             }
-        
+        }
+
         // ====================================================================
         // Stage 5: Deploy to Kubernetes
         // ====================================================================
@@ -132,8 +131,8 @@ stage('Checkout') {
                     // Update deployment with new image
                     sh """
                         # Apply deployment and service YAMLs
-                        kubectl apply -f phase1-static-site/k8s/deployment.yaml --namespace=${K8S_NAMESPACE}
-                        kubectl apply -f phase1-static-site/k8s/service.yaml --namespace=${K8S_NAMESPACE}
+                        kubectl apply -f ${WORKSPACE}/proxmox/phase1-static-site/k8s/deployment.yaml --namespace=${K8S_NAMESPACE}
+                        kubectl apply -f ${WORKSPACE}/proxmox/phase1-static-site/k8s/service.yaml --namespace=${K8S_NAMESPACE}
                         
                         # Set the new image in deployment
                         kubectl set image deployment/static-site \

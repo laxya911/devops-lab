@@ -1,10 +1,5 @@
-## File 23: `QUICK_REFERENCE.md` (Quick Reference Guide)
-
-```markdown
 # Quick Reference - Kubernetes DevOps Lab
 
-## Directory Structure
-```
 
 k8s-devops-lab/
 ├── terraform/ # Infrastructure as Code
@@ -12,20 +7,13 @@ k8s-devops-lab/
 ├── scripts/ # Automation scripts
 └── docs/ # Documentation
 
-````
-
-## Common Commands
-
-### Terraform
-
-```bash
 cd terraform
 
 # Initialize
 terraform init
 
 # Validate
-terraform validate
+terraform validate 
 
 # Plan
 terraform plan -out=tfplan
@@ -34,17 +22,8 @@ terraform plan -out=tfplan
 terraform apply tfplan
 
 # Destroy
-terraform destroy -auto-approve
-
-# Show outputs
-terraform output
-terraform output -json > ../outputs.json
-````
 
 ### Ansible
-
-```bash
-cd ansible
 
 # Check syntax
 ansible-playbook --syntax-check playbooks/*.yml
@@ -55,17 +34,8 @@ ansible-playbook -i inventory.ini playbooks/01-prepare.yml
 # Run specific host
 ansible-playbook -i inventory.ini playbooks/02-k3s-master.yml -l kube-master
 
-# Dry run
-ansible-playbook -i inventory.ini playbooks/*.yml --check
-
-# Verbose output
-ansible-playbook -i inventory.ini playbooks/*.yml -vv
-```
 
 ### Kubernetes
-
-```bash
-# Get resources
 kubectl get nodes
 kubectl get pods -A
 kubectl get svc -A
@@ -86,41 +56,31 @@ kubectl exec -it <pod-name> -n default -- /bin/bash
 kubectl port-forward pod/<pod-name> 8080:8080
 
 # Scale deployment
-kubectl scale deployment <name> --replicas=3
-
-# Delete resource
-kubectl delete pod <pod-name>
-kubectl delete deployment <name>
-```
 
 ### SSH Access
-
-```bash
-# Master
-ssh -i ~/.ssh/id_rsa ubuntu@10.0.1.10
+ssh -i ~/.ssh/id_rsa ubuntu@ip_address
 
 # Worker 1
-ssh -i ~/.ssh/id_rsa ubuntu@10.0.1.20
+ssh -i ~/.ssh/id_rsa ubuntu@ip_address
 
 # Worker 2
-ssh -i ~/.ssh/id_rsa ubuntu@10.0.1.30
+ssh -i ~/.ssh/id_rsa ubuntu@ip_address
 
 # Jenkins
-ssh -i ~/.ssh/id_rsa ubuntu@10.0.1.40
+ssh -i ~/.ssh/id_rsa ubuntu@ip_address
 
 # Monitoring
-ssh -i ~/.ssh/id_rsa ubuntu@10.0.1.50
-```
+ssh -i ~/.ssh/id_rsa ubuntu@ip_address
 
 ## Instance IPs
 
 | Instance   | Private IP | Service                |
 | ---------- | ---------- | ---------------------- |
-| Master     | 10.0.1.10  | K8s API, etcd, Kubelet |
-| Worker 1   | 10.0.1.20  | Kubelet, Pods          |
-| Worker 2   | 10.0.1.30  | Kubelet, Pods          |
-| CI/CD      | 10.0.1.40  | Jenkins, Nexus         |
-| Monitoring | 10.0.1.50  | Prometheus, Grafana    |
+| Master     | ip_address  | K8s API, etcd, Kubelet |
+| Worker 1   | ip_address  | Kubelet, Pods          |
+| Worker 2   | ip_address  | Kubelet, Pods          |
+| CI/CD      | ip_address  | Jenkins, Nexus         |
+| Monitoring | ip_address  | Prometheus, Grafana    |
 
 ## Service Ports
 
@@ -165,15 +125,6 @@ ssh -i ~/.ssh/id_rsa ubuntu@10.0.1.50
 
 ## Playbook Execution Order
 
-1. `01-prepare.yml` - Base system setup (all hosts)
-2. `02-k3s-master.yml` - Kubernetes master
-3. `03-k3s-worker.yml` - Kubernetes workers
-4. `04-jenkins-nexus.yml` - CI/CD stack
-5. `05-monitoring.yml` - Monitoring stack
-
-## Useful Aliases
-
-```bash
 # Add to ~/.bashrc or ~/.zshrc
 alias k='kubectl'
 alias kgn='kubectl get nodes'

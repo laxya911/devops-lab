@@ -51,8 +51,8 @@ spec:
       - name: nginx  # Container name
         
         # Image to use (will be updated by Jenkins pipeline)
-        # Format: <nexus-registry>/<repository>/<image>:<tag>
-        image: nginx:alpine  # Default image (will be replaced)
+        # Format: <nexus-registry>/<image>:<tag>
+        image: 192.168.0.33:5000/static-site:latest
         
         # Image pull policy
         imagePullPolicy: Always  # Always pull latest image

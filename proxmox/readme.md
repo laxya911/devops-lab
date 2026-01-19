@@ -1,10 +1,3 @@
-# Kubernetes DevOps Lab - Oracle Cloud Free Tier
-
-Complete Infrastructure as Code setup using Terraform + Ansible for a production-ready Kubernetes testing lab on Oracle Cloud Free Tier.
-
-## Quick Start (5 minutes)
-
-```bash
 # 1. Clone or setup directory
 mkdir -p ~/k8s-devops-lab
 cd ~/k8s-devops-lab
