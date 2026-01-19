@@ -80,14 +80,20 @@ stage('Checkout') {
                 # Remove any existing test-container
                 docker rm -f test-container || true
                 
-                # Start container in background
-                docker run -d --name test-container -p 8888:80 ${FULL_IMAGE_NAME}
+                # Start container in background (no port mapping needed)
+                docker run -d --name test-container ${FULL_IMAGE_NAME}
                 
                 # Wait for container to start
                 sleep 5
                 
-                # Test if Nginx is responding (use host IP since we're in Jenkins container)
-                curl -f http://192.168.0.33:8888 || exit 1
+                # Check if container is running
+                docker ps | grep test-container
+                
+                # Check nginx configuration is valid
+                docker exec test-container nginx -t
+                
+                # Test HTTP response from inside the container
+                docker exec test-container curl -f http://localhost || exit 1
                 
                 # Cleanup test container
                 docker stop test-container
