@@ -1,0 +1,35 @@
+---
+# Role: user
+# Ensures deploy/ansible user exists, has sudo, and SSH keys in place
+- name: Ensure ansible user exists
+  user:
+    name: "{{ ansible_user | default('ubuntu') }}"
+    groups: sudo
+    shell: /bin/bash
+    create_home: yes
+    state: present
+
+- name: Ensure .ssh directory exists for ansible user
+  file:
+    path: "/home/{{ ansible_user | default('ubuntu') }}/.ssh"
+    state: directory
+    owner: "{{ ansible_user | default('ubuntu') }}"
+    group: "{{ ansible_user | default('ubuntu') }}"
+    mode: '0700'
+
+- name: Upload authorized_keys for ansible user (if provided)
+  copy:
+    dest: "/home/{{ ansible_user | default('ubuntu') }}/.ssh/authorized_keys"
+    content: "{{ ssh_public_key | default(lookup('env','SSH_PUBLIC_KEY') | default(lookup('file','~/.ssh/id_rsa.pub'))) }}\n"
+    owner: "{{ ansible_user | default('ubuntu') }}"
+    group: "{{ ansible_user | default('ubuntu') }}"
+    mode: '0600'
+  when: ssh_public_key is defined or lookup('env','SSH_PUBLIC_KEY') is defined or lookup('file','~/.ssh/id_rsa.pub') is defined
+
+- name: Ensure passwordless sudo for ansible user
+  copy:
+    dest: "/etc/sudoers.d/{{ ansible_user | default('ubuntu') }}"
+    content: "{{ ansible_user | default('ubuntu') }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: '0440'

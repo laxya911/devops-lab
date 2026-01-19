@@ -1,0 +1,8 @@
+mirrors:
+  "{{ registry_url | default(docker_registry_url) }}":
+    endpoint:
+      - "http://{{ registry_url | default(docker_registry_url) }}"
+configs:
+  "{{ registry_url | default(docker_registry_url) }}":
+    tls:
+      insecure_skip_verify: true

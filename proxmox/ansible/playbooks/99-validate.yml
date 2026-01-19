@@ -1,0 +1,147 @@
+---
+# Validation playbook — tests host health and CI/CD system readiness
+# This does not make changes, only verifies.
+
+###############################################################################
+- name: Validate basic host reachability and user environment
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Verify Ansible can ping the host
+      ansible.builtin.ping:
+
+    - name: Check ansible user home exists
+      ansible.builtin.stat:
+        path: "/home/{{ ansible_user | default('ansible') }}"
+      register: user_home
+
+    - name: Fail if ansible user home is missing
+      ansible.builtin.fail:
+        msg: "User home for {{ ansible_user | default('ansible') }} not present"
+      when: not user_home.stat.exists
+
+################################################################################
+- name: Validate CI/CD host (Docker, Jenkins, Nexus)
+  hosts: cicd
+  gather_facts: true
+
+  tasks:
+    - name: Ensure docker service facts are available
+      ansible.builtin.service_facts:
+
+    - name: Assert Docker service is running
+      ansible.builtin.assert:
+        that:
+          - "'docker.service' in ansible_facts.services or 'docker' in ansible_facts.services"
+        fail_msg: "Docker service not found or not running on CI host"
+
+    - name: Check Jenkins HTTP endpoint
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:8080"
+        method: GET
+        status_code: [200, 403]
+      register: jenkins_http
+      retries: 3
+      delay: 5
+      until: jenkins_http.status is defined
+
+    - name: Check Nexus HTTP endpoint
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}:8081"
+        method: GET
+        status_code: [200, 302]
+      register: nexus_http
+      retries: 3
+      delay: 5
+      until: nexus_http.status is defined
+
+    - name: Report CI host container list
+      ansible.builtin.command: "sudo docker ps --format '{{ '{{' }}.Names{{ '}}' }}'"
+      register: docker_ps
+      changed_when: false
+
+    - ansible.builtin.debug:
+        msg: "Running containers on CI host: {{ docker_ps.stdout }}"
+
+################################################################################
+- name: Validate Kubernetes master
+  hosts: kubernetes_master
+  gather_facts: true
+
+  tasks:
+    - name: Ensure K3s server config exists
+      ansible.builtin.stat:
+        path: /etc/rancher/k3s/k3s.yaml
+      register: k3s_conf
+
+    - name: Fail if K3s config missing
+      ansible.builtin.fail:
+        msg: "k3s config missing on master"
+      when: not k3s_conf.stat.exists
+
+    - name: Check K3s API port open
+      ansible.builtin.wait_for:
+        port: 6443
+        host: "{{ ansible_host }}"
+        timeout: 10
+
+    - name: Display K3s nodes
+      ansible.builtin.command:
+        cmd: kubectl get nodes -o wide --kubeconfig=/etc/rancher/k3s/k3s.yaml
+      register: nodes_list
+      changed_when: false
+
+    - ansible.builtin.debug:
+        msg: "K3s cluster nodes:\n{{ nodes_list.stdout }}"
+
+################################################################################
+- name: Validate registry access from Kubernetes
+  hosts: kubernetes_master
+  gather_facts: true
+  vars:
+    # Only test registry pull if registry variable is provided
+    docker_registry_url: "{{ groups['jenkins_servers'][0] }}:5000"
+
+  tasks:
+    - name: Create test namespace for registry validation
+      ansible.builtin.command:
+        cmd: kubectl create namespace registry-test --kubeconfig=/etc/rancher/k3s/k3s.yaml
+      register: ck8s_ns
+      changed_when: "'already exists' not in ck8s_ns.stderr"
+
+    - name: Launch a test pod that pulls from registry
+      ansible.builtin.command:
+        cmd: >-
+          kubectl run registry-validate-pod
+          --image={{ docker_registry_url }}/alpine:3.18
+          --restart=Never -n registry-test
+          -- /bin/sh -c "sleep 10"
+      register: run_registry_pod
+      failed_when: run_registry_pod.rc != 0
+
+    - name: Wait for test pod to be ready
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=Ready pod/registry-validate-pod
+          -n registry-test
+          --kubeconfig=/etc/rancher/k3s/k3s.yaml
+          --timeout=60s
+      register: wait_registry_pod
+      failed_when: wait_registry_pod.rc != 0
+
+################################################################################
+- name: Validate Kubernetes workers
+  hosts: kubernetes_workers
+  gather_facts: true
+
+  tasks:
+    - name: Check k3s-agent service status
+      ansible.builtin.systemd:
+        name: k3s-agent
+      register: agent_status
+      ignore_errors: yes
+
+    - name: Report k3s-agent active state
+      ansible.builtin.debug:
+        msg: "k3s-agent on {{ inventory_hostname }} is {{ 'active' if agent_status.status.ActiveState == 'active' else 'not-active' }}"

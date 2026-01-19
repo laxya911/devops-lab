@@ -1,0 +1,678 @@
+# ################################################################################
+# # ANSIBLE PLAYBOOK 04: DOCKER-BASED CI/CD STACK (JENKINS + NEXUS + K3S REGISTRY TRUST)
+# #
+# # FEATURES:
+# # - Jenkins + Nexus run fully in Docker containers
+# # - Persistent volumes (/opt/jenkins, /opt/nexus)
+# # - Jenkins pre-configured with kubeconfig to access K3s cluster
+# # - Nexus acts as Docker registry (port 5000)
+# # - All K3s nodes trust Nexus registry for pulling images
+# # - Firewall rules configured
+# # - Fully automated plug-and-play setup
+# ################################################################################
+
+
+# ---
+# # ================================================================
+# # PLAY 1: Setup Jenkins + Nexus server
+# # ================================================================
+# - name: Setup Jenkins + Nexus server
+#   hosts: jenkins_servers
+#   become: true
+#   gather_facts: true
+
+#   vars:
+#     jenkins_port: 8080
+#     nexus_port: 8081
+#     nexus_docker_port: 5000
+
+#     jenkins_home: /opt/jenkins
+#     nexus_data: /opt/nexus
+
+#     jenkins_image: jenkins/jenkins:lts
+#     nexus_image: sonatype/nexus3:latest
+
+#     kubeconfig_src: /etc/rancher/k3s/k3s.yaml
+#     kubeconfig_dest: "{{ jenkins_home }}/.kube/config"
+
+#   tasks:
+
+#     - name: Install Docker dependencies
+#       apt:
+#         name:
+#           - ca-certificates
+#           - curl
+#           - gnupg
+#         state: present
+#         update_cache: yes
+
+#     - name: Add Docker GPG key
+#       apt_key:
+#         url: https://download.docker.com/linux/ubuntu/gpg
+#         state: present
+
+#     - name: Add Docker repository
+#       apt_repository:
+#         repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+#         state: present
+
+#     - name: Install Docker Engine and CLI
+#       apt:
+#         name:
+#           - docker-ce
+#           - docker-ce-cli
+#           - containerd.io
+#           - docker-compose-plugin
+#         state: present
+
+#     - name: Ensure Docker is running
+#       systemd:
+#         name: docker
+#         state: started
+#         enabled: yes
+
+#     - name: Add ansible user to docker group
+#       user:
+#         name: ansible
+#         groups: docker
+#         append: yes
+
+#     - name: Create Jenkins directory with correct owner
+#       file:
+#         path: "{{ jenkins_home }}"
+#         state: directory
+#         mode: '0755'
+#         owner: 1000
+#         group: 1000
+
+#     - name: Create Nexus directory with correct owner
+#       file:
+#         path: "{{ nexus_data }}"
+#         state: directory
+#         mode: '0755'
+#         owner: 200
+#         group: 200
+
+#     - name: Create Jenkins .kube directory
+#       file:
+#         path: "{{ jenkins_home }}/.kube"
+#         state: directory
+#         mode: '0755'
+#         owner: 1000
+#         group: 1000
+
+#     - name: Create CI/CD Docker network
+#       docker_network:
+#         name: cicd-network
+#         state: present
+
+#     - name: Read kubeconfig from K3s master
+#       slurp:
+#         src: "{{ kubeconfig_src }}"
+#       delegate_to: "{{ groups['kubernetes_master'][0] }}"
+#       register: kubeconfig_data
+
+#     - name: Write kubeconfig to Jenkins host
+#       copy:
+#         content: "{{ kubeconfig_data.content | b64decode }}"
+#         dest: "{{ kubeconfig_dest }}"
+#         owner: 1000
+#         group: 1000
+#         mode: '0644'
+    
+#     - name: Create Jenkins casc_configs directory
+#       file:
+#         path: "{{ jenkins_home }}/casc_configs"
+#         state: directory
+#         owner: 1000
+#         group: 1000
+#         mode: '0755'
+
+#     - name: Copy Jenkins JCasC file into Jenkins home
+#       copy:
+#         src: "{{ playbook_dir }}/../jenkins_initial_conf.yml"
+#         dest: "{{ jenkins_home }}/casc_configs/jenkins.yaml"
+#         owner: 1000
+#         group: 1000
+#         mode: '0644'
+
+#     - name: Show casc config on host
+#       ansible.builtin.shell: "ls -l {{ jenkins_home }}/casc_configs/jenkins.yaml"
+#       register: casc_ls
+#       changed_when: false
+
+#     - debug:
+#         msg: "{{ casc_ls.stdout }}"
+
+
+#     - name: Start Jenkins container
+#       docker_container:
+#         name: jenkins
+#         image: "{{ jenkins_image }}"
+#         # state: started
+#         recreate: yes
+#         restart_policy: always
+#         ports:
+#           - "{{ jenkins_port }}:8080"
+#         volumes:
+#           - "{{ jenkins_home }}:/var/jenkins_home"
+#           - /var/run/docker.sock:/var/run/docker.sock
+#         networks:
+#           - name: cicd-network
+#         env:
+#           JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+#           CASC_JENKINS_CONFIG: "/var/jenkins_home/casc_configs/jenkins.yaml"
+
+#     - name: Wait for Jenkins to be available
+#       wait_for:
+#         port: "{{ jenkins_port }}"
+#         timeout: 300
+
+#     - name: Start Nexus container
+#       docker_container:
+#         name: nexus
+#         image: "{{ nexus_image }}"
+#         state: started
+#         restart_policy: always
+#         ports:
+#           - "{{ nexus_port }}:8081"
+#           - "{{ nexus_docker_port }}:5000"
+#         volumes:
+#           - "{{ nexus_data }}:/nexus-data"
+#         networks:
+#           - name: cicd-network
+
+#     - name: Wait for Nexus to be available
+#       wait_for:
+#         port: "{{ nexus_port }}"
+#         timeout: 600
+
+#     - name: Allow SSH, Jenkins, Nexus and Docker Registry ports
+#       ufw:
+#         rule: allow
+#         port: "{{ item }}"
+#         proto: tcp
+#       loop:
+#         - 22
+#         - "{{ jenkins_port }}"
+#         - "{{ nexus_port }}"
+#         - "{{ nexus_docker_port }}"
+
+#     - name: Enable UFW safely
+#       ufw:
+#         state: enabled
+#         policy: deny
+#         direction: incoming
+# # ================================================================
+# # PLAY 2: Configure K3s nodes to trust Nexus registry
+# # ================================================================
+# - name: Configure K3s nodes to trust Nexus Docker registry
+#   hosts: kubernetes_master:kubernetes_workers
+#   become: true
+#   gather_facts: true
+
+#   vars:
+#     registry_host: "{{ groups['jenkins_servers'][0] }}"
+#     registry_port: 5000
+#     registry_yaml_path: /etc/rancher/k3s/registries.yaml
+
+#   tasks:
+
+#     - name: Ensure K3s registry directory exists
+#       file:
+#         path: /etc/rancher/k3s
+#         state: directory
+#         mode: '0755'
+
+#     - name: Ensure registries.yaml exists
+#       copy:
+#         dest: "{{ registry_yaml_path }}"
+#         content: ""      
+#         owner: root
+#         group: root
+#         mode: '0644'
+
+#     - name: Add Nexus registry entry
+#       blockinfile:
+#         path: "{{ registry_yaml_path }}"
+#         marker: "# {mark} ANSIBLE NEXUS REGISTRY"
+#         block: |
+#           mirrors:
+#             "{{ registry_host }}:{{ registry_port }}":
+#               endpoint:
+#                 - "http://{{ registry_host }}:{{ registry_port }}"
+
+#     - name: Restart K3s service on master
+#       systemd:
+#         name: k3s
+#         state: restarted
+#       when: "'kubernetes_master' in group_names"
+
+#     - name: Restart K3s agent service on workers
+#       systemd:
+#         name: k3s-agent
+#         state: restarted
+#       when: "'kubernetes_workers' in group_names"
+
+# ================= Jenkins + Nexus + K3s Registry Automation ===============
+
+# ---
+# - name: Setup Jenkins + Nexus server
+#   hosts: jenkins_servers
+#   become: true
+#   gather_facts: true
+
+#   vars:
+#     jenkins_port: 8080
+#     jenkins_home: /opt/jenkins
+#     jenkins_image: jenkins/jenkins:lts
+#     nexus_image: sonatype/nexus3:latest
+#     nexus_port: 8081
+#     nexus_docker_port: 5000
+#     nexus_data: /opt/nexus
+
+#   tasks:
+
+#     # --------------------------------------------------------------------------
+#     # Install Docker
+#     # --------------------------------------------------------------------------
+
+#     - name: Install Docker prerequisites
+#       apt:
+#         name:
+#           - ca-certificates
+#           - curl
+#           - gnupg
+#         state: present
+#         update_cache: yes
+
+#     - name: Add Docker GPG key
+#       apt_key:
+#         url: https://download.docker.com/linux/ubuntu/gpg
+#         state: present
+
+#     - name: Add Docker repository
+#       apt_repository:
+#         repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+#         state: present
+
+#     - name: Install Docker Engine
+#       apt:
+#         name:
+#           - docker-ce
+#           - docker-ce-cli
+#           - containerd.io
+#           - docker-compose-plugin
+#         state: present
+
+#     - name: Ensure Docker is running
+#       systemd:
+#         name: docker
+#         state: started
+#         enabled: yes
+
+#     - name: Add ansible user to docker group
+#       user:
+#         name: ansible
+#         groups: docker
+#         append: yes
+
+#     # --------------------------------------------------------------------------
+#     # Prepare persistent directories
+#     # --------------------------------------------------------------------------
+
+#     - name: Create Jenkins home directory
+#       file:
+#         path: "{{ jenkins_home }}"
+#         state: directory
+#         owner: 1000
+#         group: 1000
+#         mode: '0755'
+
+#     - name: Create Nexus data directory
+#       file:
+#         path: "{{ nexus_data }}"
+#         state: directory
+#         owner: 200
+#         group: 200
+#         mode: '0755'
+
+#     # --------------------------------------------------------------------------
+#     # Start Jenkins container (normal first-run, no automated plugin install)
+#     # --------------------------------------------------------------------------
+
+#     - name: Start Jenkins container
+#       docker_container:
+#         name: jenkins
+#         image: "{{ jenkins_image }}"
+#         state: started
+#         restart_policy: always
+#         ports:
+#           - "{{ jenkins_port }}:8080"
+#         volumes:
+#           - "{{ jenkins_home }}:/var/jenkins_home"
+#           - /var/run/docker.sock:/var/run/docker.sock
+#         env: {}
+
+#     - name: Wait for Jenkins to be available
+#       wait_for:
+#         host: "{{ ansible_host }}"
+#         port: "{{ jenkins_port }}"
+#         timeout: 300
+
+
+#     # -------------------- Start Nexus container -----------------------------
+
+#     - name: Start Nexus container
+#       docker_container:
+#         name: nexus
+#         image: "{{ nexus_image }}"
+#         state: started
+#         restart_policy: always
+#         ports:
+#           - "{{ nexus_port }}:8081"
+#           - "{{ nexus_docker_port }}:5000"
+#         volumes:
+#           - "{{ nexus_data }}:/nexus-data"
+#         networks:
+#           - name: cicd-network
+
+#     - name: Wait for Nexus to be available
+#       wait_for:
+#         host: "{{ ansible_host }}"
+#         port: "{{ nexus_port }}"
+#         timeout: 600
+
+#     # -------------------- Firewall for CI host -------------------------------
+
+#     - name: Allow SSH, Jenkins, Nexus and Docker Registry ports
+#       ufw:
+#         rule: allow
+#         port: "{{ item }}"
+#         proto: tcp
+#       loop:
+#         - 22
+#         - "{{ jenkins_port }}"
+#         - "{{ nexus_port }}"
+#         - "{{ nexus_docker_port }}"
+
+#     - name: Enable UFW safely
+#       ufw:
+#         state: enabled
+#         policy: deny
+#         direction: incoming
+
+# # ================= Configure K3s nodes to trust Nexus registry ===============
+
+# - name: Configure K3s nodes to trust Nexus Docker registry
+#   hosts: kubernetes_master:kubernetes_workers
+#   become: true
+#   gather_facts: true
+
+#   vars:
+#     registry_host: "{{ groups['jenkins_servers'][0] }}"
+#     registry_port: 5000
+#     registry_yaml_path: /etc/rancher/k3s/registries.yaml
+
+#   tasks:
+
+#     - name: Ensure K3s registry directory exists
+#       file:
+#         path: /etc/rancher/k3s
+#         state: directory
+#         mode: '0755'
+
+#     - name: Ensure registries.yaml exists
+#       copy:
+#         dest: "{{ registry_yaml_path }}"
+#         content: ""
+#         owner: root
+#         group: root
+#         mode: '0644'
+
+#     - name: Add Nexus registry entry
+#       blockinfile:
+#         path: "{{ registry_yaml_path }}"
+#         marker: "# {mark} ANSIBLE NEXUS REGISTRY"
+#         block: |
+#           mirrors:
+#             "{{ registry_host }}:{{ registry_port }}":
+#               endpoint:
+#                 - "http://{{ registry_host }}:{{ registry_port }}"
+
+#     - name: Restart K3s service on master
+#       systemd:
+#         name: k3s
+#         state: restarted
+#       when: "'kubernetes_master' in group_names"
+
+#     - name: Restart K3s agent service on workers
+#       systemd:
+#         name: k3s-agent
+#         state: restarted
+#       when: "'kubernetes_workers' in group_names"
+
+
+---
+- name: Setup Jenkins + Nexus server
+  hosts: jenkins_servers
+  become: true
+  gather_facts: true
+
+  vars:
+    jenkins_port: 8080
+    jenkins_home: /opt/jenkins
+    jenkins_image: jenkins/jenkins:lts
+    nexus_image: sonatype/nexus3:latest
+    nexus_port: 8081
+    nexus_docker_port: 5000
+    nexus_data: /opt/nexus
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Install Docker Engine on host (needed for builds)
+    # --------------------------------------------------------------------------
+
+    - name: Install Docker prerequisites
+      apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: yes
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker Engine
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+
+    - name: Ensure Docker is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ansible user to docker group
+      user:
+        name: ansible
+        groups: docker
+        append: yes
+
+    # --------------------------------------------------------------------------
+    # Prepare persistent directories
+    # --------------------------------------------------------------------------
+
+    - name: Create Jenkins home directory
+      file:
+        path: "{{ jenkins_home }}"
+        state: directory
+        owner: 1000
+        group: 1000
+        mode: '0755'
+
+    - name: Create Nexus data directory
+      file:
+        path: "{{ nexus_data }}"
+        state: directory
+        owner: 200
+        group: 200
+        mode: '0755'
+
+    # --------------------------------------------------------------------------
+    # Start Jenkins container
+    # --------------------------------------------------------------------------
+
+    - name: Start Jenkins container
+      docker_container:
+        name: jenkins
+        image: "{{ jenkins_image }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "{{ jenkins_port }}:8080"
+        volumes:
+          # bind Jenkins home
+          - "{{ jenkins_home }}:/var/jenkins_home"
+          # bind Docker socket so container can talk to host Docker
+          - /var/run/docker.sock:/var/run/docker.sock
+        env: {}
+      register: jenkins_container
+
+    - name: Wait for Jenkins to be available
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ jenkins_port }}"
+        timeout: 300
+
+    # --------------------------------------------------------------------------
+    # Install Docker CLI inside Jenkins container
+    #
+    # This ensures 'docker' exists for pipeline builds.
+    # --------------------------------------------------------------------------
+
+    - name: Install Docker CLI in Jenkins container
+      docker_container:
+        name: install_docker_cli
+        image: "{{ jenkins_image }}"
+        state: started
+        command: >
+          sh -c "apt-get update && apt-get install -y docker.io && chown -R 1000:1000 /var/jenkins_home"
+        volumes:
+          - "{{ jenkins_home }}:/var/jenkins_home"
+          - /var/run/docker.sock:/var/run/docker.sock
+        network_mode: "container:jenkins"
+      # This will run once, install docker CLI into the same filesystem Jenkins uses.
+      # container removed automatically when done
+      auto_remove: true
+      detach: false
+
+    # --------------------------------------------------------------------------
+    # Start/Ensure Nexus
+    # --------------------------------------------------------------------------
+
+    - name: Start Nexus container
+      docker_container:
+        name: nexus
+        image: "{{ nexus_image }}"
+        state: started
+        restart_policy: always
+        ports:
+          - "{{ nexus_port }}:8081"
+          - "{{ nexus_docker_port }}:5000"
+        volumes:
+          - "{{ nexus_data }}:/nexus-data"
+        networks:
+          - name: cicd-network
+
+    - name: Wait for Nexus to be available
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ nexus_port }}"
+        timeout: 600
+
+    # --------------------------------------------------------------------------
+    # Firewall for CI host
+    # --------------------------------------------------------------------------
+
+    - name: Allow SSH, Jenkins, Nexus and Docker Registry ports
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - 22
+        - "{{ jenkins_port }}"
+        - "{{ nexus_port }}"
+        - "{{ nexus_docker_port }}"
+
+    - name: Enable UFW safely
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+# ==============================================================================
+
+- name: Configure K3s nodes to trust Nexus Docker registry
+  hosts: kubernetes_master:kubernetes_workers
+  become: true
+  gather_facts: true
+
+  vars:
+    registry_host: "{{ groups['jenkins_servers'][0] }}"
+    registry_port: 5000
+    registry_yaml_path: /etc/rancher/k3s/registries.yaml
+
+  tasks:
+
+    - name: Ensure K3s registry directory exists
+      file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: '0755'
+
+    - name: Ensure registries.yaml exists
+      copy:
+        dest: "{{ registry_yaml_path }}"
+        content: ""
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Add Nexus registry entry
+      blockinfile:
+        path: "{{ registry_yaml_path }}"
+        marker: "# {mark} ANSIBLE NEXUS REGISTRY"
+        block: |
+          mirrors:
+            "{{ registry_host }}:{{ registry_port }}":
+              endpoint:
+                - "http://{{ registry_host }}:{{ registry_port }}"
+
+    - name: Restart K3s service on master
+      systemd:
+        name: k3s
+        state: restarted
+      when: "'kubernetes_master' in group_names"
+
+    - name: Restart K3s agent service on workers
+      systemd:
+        name: k3s-agent
+        state: restarted
+      when: "'kubernetes_workers' in group_names"

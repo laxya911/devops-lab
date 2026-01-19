@@ -1,0 +1,14 @@
+---
+- name: Restart k3s service
+  block:
+    - name: Restart k3s on master
+      systemd:
+        name: k3s
+        state: restarted
+      when: "'kubernetes_master' in group_names"
+
+    - name: Restart k3s-agent on workers
+      systemd:
+        name: k3s-agent
+        state: restarted
+      when: "'kubernetes_workers' in group_names"

@@ -1,0 +1,39 @@
+plugin: community.general.proxmox
+
+# --- Proxmox API ---
+url: "{{ lookup('env','PROXMOX_URL') | default('https://127.0.0.1:8006') }}"
+# Authentication: prefer API token via env vars; fall back to PROXMOX_USER/PROXMOX_PASSWORD if set
+user: "{{ lookup('env','PROXMOX_USER') | default(omit) }}"
+password: "{{ lookup('env','PROXMOX_PASSWORD') | default(omit) }}"
+
+# token_id: terraform
+# token_secret: 320ccab2-c4b5-4edb-a404-2e5c65a13656
+
+validate_certs: false
+
+# --- What to fetch ---
+want_facts: true
+want_proxmox_nodes: false
+want_proxmox_lxc: false
+want_proxmox_qemu: true
+
+# Filter: Only include hosts with the specific tag we used in Terraform
+filters:
+  - "'k8s-devops-lab' in (proxmox_tags_parsed | default([]))"
+  - "proxmox_vmtype == 'qemu'"
+  # Extra safety: ensure only VMs with explicit lab tag are included
+  - "'k8s-devops-lab' in (proxmox_tags_parsed | default([]))"
+
+# --- Grouping ---
+groups:
+  project_lab: "'k8s-devops-lab' in (proxmox_tags_parsed | default([]))"
+  kubernetes_master: "'kube-master' in inventory_hostname"
+  kubernetes_workers: "'kube-worker' in inventory_hostname"
+  jenkins_servers: "'jenkins' in inventory_hostname"
+  monitoring_servers: "'monitor' in inventory_hostname"
+
+# --- Connection details ---
+compose:
+  ansible_host: proxmox_ipconfig0.ip | default(proxmox_ipconfig0 | regex_replace('^ip=', '')) | regex_replace('/.*$', '')
+  ansible_user: "{{ lookup('env','ANSIBLE_SSH_USER') | default('ubuntu') }}"
+  ansible_ssh_common_args: "{{ lookup('env','ANSIBLE_SSH_COMMON_ARGS') | default('-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null') }}"

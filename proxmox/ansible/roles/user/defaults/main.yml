@@ -1,0 +1,5 @@
+---
+# defaults for user role
+ansible_user: ubuntu
+# ssh_public_key may be provided as extra-var, from inventory or environment
+ssh_public_key: ''

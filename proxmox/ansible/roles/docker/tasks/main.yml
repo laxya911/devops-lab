@@ -1,0 +1,25 @@
+---
+# Role: docker
+# Manage Docker daemon configuration and ensure Docker service is running
+- name: Ensure /etc/docker directory exists
+  file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Deploy daemon.json
+  template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Docker
+
+- name: Ensure docker service is running
+  systemd:
+    name: docker
+    state: started
+    enabled: yes

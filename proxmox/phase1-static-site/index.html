@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevOps Lab - Phase 1</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Header Section -->
+        <header>
+            <h1>🚀 DevOps Lab - Phase 1</h1>
+            <p class="subtitle">Static Website Deployment on Kubernetes</p>
+        </header>
+
+        <!-- Info Cards -->
+        <div class="card-grid">
+            <!-- Kubernetes Info -->
+            <div class="card">
+                <h2>⚙️ Kubernetes Cluster</h2>
+                <ul>
+                    <li><strong>Cluster:</strong> K3s v1.28.3</li>
+                    <li><strong>Nodes:</strong> 1 Master + 2 Workers</li>
+                    <li><strong>Runtime:</strong> containerd</li>
+                </ul>
+            </div>
+
+            <!-- Application Info -->
+            <div class="card">
+                <h2>📦 Application</h2>
+                <ul>
+                    <li><strong>Type:</strong> Static Website</li>
+                    <li><strong>Server:</strong> Nginx Alpine</li>
+                    <li><strong>Replicas:</strong> <span id="replica-count">3</span></li>
+                </ul>
+            </div>
+
+            <!-- CI/CD Info -->
+            <div class="card">
+                <h2>🔄 CI/CD Pipeline</h2>
+                <ul>
+                    <li><strong>Build:</strong> Jenkins</li>
+                    <li><strong>Registry:</strong> Nexus</li>
+                    <li><strong>Deploy:</strong> kubectl</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Testing Section -->
+        <div class="testing-section">
+            <h2>✅ Testing Checklist</h2>
+            <div class="checklist">
+                <label>
+                    <input type="checkbox" id="check1">
+                    <span>Manual deployment successful</span>
+                </label>
+                <label>
+                    <input type="checkbox" id="check2">
+                    <span>Application accessible via NodePort</span>
+                </label>
+                <label>
+                    <input type="checkbox" id="check3">
+                    <span>Self-healing verified (pod deletion)</span>
+                </label>
+                <label>
+                    <input type="checkbox" id="check4">
+                    <span>Scaling tested (3 → 5 replicas)</span>
+                </label>
+                <label>
+                    <input type="checkbox" id="check5">
+                    <span>Jenkins pipeline executed</span>
+                </label>
+                <label>
+                    <input type="checkbox" id="check6">
+                    <span>Image pushed to Nexus</span>
+                </label>
+                <label>
+                    <input type="checkbox" id="check7">
+                    <span>Rolling update completed</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Pod Info (Dynamic) -->
+        <div class="pod-info">
+            <h3>🎯 Pod Information</h3>
+            <p><strong>Hostname:</strong> <span id="hostname">Loading...</span></p>
+            <p><strong>Pod IP:</strong> <span id="pod-ip">Loading...</span></p>
+            <p class="note">Note: Refresh to see different pods (load balancing)</p>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            <p>Phase 1: Static Website | Next: Phase 2 - REST API</p>
+            <p class="version">Version 1.0 | Built with ❤️ for DevOps Learning</p>
+        </footer>
+    </div>
+
+    <!-- Simple JavaScript for dynamic content -->
+    <script>
+        // Simulate pod hostname (in real deployment, this would come from server)
+        document.getElementById('hostname').textContent = 
+            'static-site-' + Math.random().toString(36).substring(7);
+        
+        // Simulate pod IP
+        document.getElementById('pod-ip').textContent = 
+            '10.42.' + Math.floor(Math.random() * 3) + '.' + Math.floor(Math.random() * 255);
+        
+        // Save checkbox state to localStorage
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            // Load saved state
+            const saved = localStorage.getItem(checkbox.id);
+            if (saved === 'true') checkbox.checked = true;
+            
+            // Save on change
+            checkbox.addEventListener('change', () => {
+                localStorage.setItem(checkbox.id, checkbox.checked);
+            });
+        });
+    </script>
+</body>
+</html>

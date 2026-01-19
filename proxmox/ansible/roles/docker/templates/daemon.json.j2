@@ -1,0 +1,13 @@
+{
+  "insecure-registries": {{ insecure_registries | default([]) | to_json }},
+  "registry-mirrors": {{ registry_mirrors | default([]) | to_json }}
+  {% if tls_comment is defined and tls_comment %}
+  /*
+  TLS configuration (optional - uncomment and populate certs):
+  "tls": {
+    "certfile": "/etc/docker/certs.d/my-registry:5000/ca.crt",
+    "keyfile": "/etc/docker/certs.d/my-registry:5000/server.key"
+  }
+  */
+  {% endif %}
+}

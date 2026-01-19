@@ -1,0 +1,68 @@
+pipeline {
+  agent any
+  environment {
+    IMAGE_NAME = 'phase1-static-site'
+    REGISTRY = credentials('nexus-registry-url')
+  }
+  options { ansiColor('xterm') }
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+    stage('Prepare Kubeconfig') {
+      steps {
+        withCredentials([file(credentialsId: 'kubeconfig-jenkins-deployer', variable: 'KUBECONFIG_FILE')]) {
+          sh 'export KUBECONFIG=$KUBECONFIG_FILE'
+          script {
+            env.KUBECONFIG = "${KUBECONFIG_FILE}"
+          }
+        }
+      }
+    }
+    stage('Preflight Checks') {
+      steps {
+        withCredentials([file(credentialsId: 'kubeconfig-jenkins-deployer', variable: 'KUBECONFIG_FILE')]) {
+          sh '''
+          export KUBECONFIG=$KUBECONFIG_FILE
+          kubectl auth can-i update deployment --namespace default || (echo "No permission to update deployments" && exit 1)
+          kubectl get nodes
+          '''
+        }
+      }
+    }
+    stage('Build & Push') {
+      steps {
+        sh 'docker build -t ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER} phase1-static-site'
+        withCredentials([usernamePassword(credentialsId: 'nexus-registry-creds', usernameVariable: 'REG_USER', passwordVariable: 'REG_PASS')]) {
+          sh 'docker login -u $REG_USER -p $REG_PASS ${REGISTRY}'
+          sh 'docker push ${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}'
+        }
+      }
+    }
+    stage('Deploy') {
+      steps {
+        withCredentials([file(credentialsId: 'kubeconfig-jenkins-deployer', variable: 'KUBECONFIG_FILE')]) {
+          sh '''
+          export KUBECONFIG=$KUBECONFIG_FILE
+          # Render deployment manifest with new image
+          sed "s|IMAGE_PLACEHOLDER|${REGISTRY}/${IMAGE_NAME}:${BUILD_NUMBER}|g" phase1-static-site/k8s/deployment.template.yaml > /tmp/deploy.yaml
+          kubectl apply -f /tmp/deploy.yaml
+          kubectl rollout status deployment/static-site -n default --timeout=120s || echo "Rollout may be delayed"
+          '''
+        }
+      }
+    }
+    stage('Verify') {
+      steps {
+        withCredentials([file(credentialsId: 'kubeconfig-jenkins-deployer', variable: 'KUBECONFIG_FILE')]) {
+          sh '''
+          export KUBECONFIG=$KUBECONFIG_FILE
+          kubectl get pods -l app=phase1-static-site -o wide
+          '''
+        }
+      }
+    }
+  }
+}

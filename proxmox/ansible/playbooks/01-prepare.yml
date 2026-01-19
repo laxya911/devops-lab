@@ -1,0 +1,206 @@
+################################################################################
+# ANSIBLE PLAYBOOK 01: BASE SYSTEM PREPARATION
+#
+# PURPOSE:
+# - Bootstrap ALL hosts safely
+# - Never break SSH access
+# - Create ansible user correctly
+# - Firewall only AFTER SSH is guaranteed
+#
+# SAFE DESIGN:
+# - Terraform injects SSH for ubuntu
+# - Ansible creates ansible user
+# - SSH keys are appended, never overwritten
+# - UFW enabled last with SSH explicitly allowed
+################################################################################
+
+---
+- name: Prepare all systems (base configuration)
+  hosts: project_lab
+  become: true
+  gather_facts: true
+
+  vars:
+    bootstrap_user: ubuntu
+    provision_user: ansible
+    ssh_public_key: "{{ lookup('file', lookup('env','HOME') + '/.ssh/id_rsa.pub') }}"
+
+  tasks:
+    # ==========================================================================
+    # SYSTEM UPDATE & BASE PACKAGES
+    # ==========================================================================
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Upgrade all installed packages
+      apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+
+    - name: Install base utility packages
+      apt:
+        name:
+          - curl
+          - wget
+          - git
+          - vim
+          - htop
+          - net-tools
+          - ca-certificates
+          - apt-transport-https
+          - software-properties-common
+          - jq
+          - unzip
+          - python3
+          - python3-pip
+        state: present
+
+    # ==========================================================================
+    # USER MANAGEMENT (SAFE BOOTSTRAP)
+    # ==========================================================================
+
+    - name: Ensure ansible user exists
+      user:
+        name: "{{ provision_user }}"
+        groups: sudo
+        shell: /bin/bash
+        append: yes
+        state: present
+
+    - name: Allow ansible user passwordless sudo
+      copy:
+        dest: "/etc/sudoers.d/{{ provision_user }}"
+        content: "{{ provision_user }} ALL=(ALL) NOPASSWD:ALL\n"
+        owner: root
+        group: root
+        mode: '0440'
+
+    - name: Ensure .ssh directory exists for ansible user
+      file:
+        path: "/home/{{ provision_user }}/.ssh"
+        owner: "{{ provision_user }}"
+        group: "{{ provision_user }}"
+        mode: '0700'
+        state: directory
+
+    - name: Add SSH key to ansible user (append only)
+      authorized_key:
+        user: "{{ provision_user }}"
+        key: "{{ ssh_public_key }}"
+        state: present
+
+    # ==========================================================================
+    # HOSTNAME & HOSTS FILE
+    # ==========================================================================
+
+    - name: Set system hostname from inventory
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Ensure hostname is in /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127.0.1.1'
+        line: "127.0.1.1 {{ inventory_hostname }}"
+        state: present
+
+    # ==========================================================================
+    # SWAP (REQUIRED FOR KUBERNETES)
+    # ==========================================================================
+
+    - name: Disable swap immediately
+      command: swapoff -a
+      ignore_errors: true
+
+    - name: Remove swap entries from /etc/fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*swap.*)$'
+        replace: '# \1'
+
+    # ==========================================================================
+    # KUBERNETES PREPARATION (LXC-SAFE)
+    # ==========================================================================
+
+    - name: Document Kubernetes-required kernel modules
+      copy:
+        dest: /etc/modules-load.d/kubernetes.conf
+        content: |
+          overlay
+          br_netfilter
+
+    # ==========================================================================
+    # FIREWALL (SAFE ORDER: SSH FIRST)
+    # ==========================================================================
+
+    - name: Ensure UFW is installed
+      apt:
+        name: ufw
+        state: present
+
+    - name: Allow SSH before enabling firewall
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Enable UFW (default deny incoming)
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    # ==========================================================================
+    # VERIFICATION
+    # ==========================================================================
+
+    - name: Verify swap is disabled
+      command: free -h
+      register: swap_status
+      changed_when: false
+
+    - name: Display swap status
+      debug:
+        msg: "{{ swap_status.stdout }}"
+
+    # ==========================================================================
+    # QEMU GUEST AGENT
+    # ==========================================================================
+
+    - name: Install QEMU guest agent
+      apt:
+        name: qemu-guest-agent
+        state: present
+
+    - name: Enable and start qemu-guest-agent
+      systemd:
+        name: qemu-guest-agent
+        enabled: yes
+        state: started
+
+    # ==========================================================================
+    # OPTIONAL: kubectl (ONLY on Jenkins)
+    # ==========================================================================
+
+    - name: Install kubectl stable binary
+      when: "'jenkins' in inventory_hostname"
+      block:
+        - name: Download latest kubectl stable version string
+          uri:
+            url: https://dl.k8s.io/release/stable.txt
+            return_content: yes
+          register: kubectl_version
+
+        - name: Download kubectl binary
+          get_url:
+            url: "https://dl.k8s.io/release/{{ kubectl_version.content | trim }}/bin/linux/amd64/kubectl"
+            dest: /usr/local/bin/kubectl
+            mode: '0755'
+
+        - name: Verify kubectl installed
+          command: kubectl version --client --short
+          changed_when: false

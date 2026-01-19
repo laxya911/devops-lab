@@ -1,0 +1,71 @@
+# ============================================================================
+# Kubernetes Service Configuration
+# ============================================================================
+# This file defines how to expose the static-site application
+# Services provide stable networking for pods
+
+apiVersion: v1    # API version for Service resource
+kind: Service     # Resource type
+metadata:
+  name: static-site  # Service name (used for DNS)
+  labels:
+    app: static-site
+    phase: phase1
+spec:
+  # ============================================================================
+  # Service Type
+  # ============================================================================
+  # NodePort: Exposes service on each node's IP at a static port
+  # Accessible from outside the cluster via <NodeIP>:<NodePort>
+  # Other options: ClusterIP (internal only), LoadBalancer (cloud provider)
+  type: NodePort
+  
+  # ============================================================================
+  # Selector - Which pods should receive traffic
+  # ============================================================================
+  # Service will route traffic to pods with these labels
+  selector:
+    app: static-site  # Must match deployment pod labels
+  
+  # ============================================================================
+  # Port Configuration
+  # ============================================================================
+  ports:
+  - name: http          # Port name (optional but good practice)
+    protocol: TCP       # Protocol (TCP or UDP)
+    port: 80            # Port exposed by the service (cluster-internal)
+    targetPort: 80      # Port on the pod to forward traffic to
+    # nodePort: 30080   # Optional: Specific NodePort (30000-32767)
+                        # If not specified, K8s assigns one automatically
+  
+  # ============================================================================
+  # Session Affinity (Optional)
+  # ============================================================================
+  # sessionAffinity: ClientIP  # Uncomment to enable sticky sessions
+  # sessionAffinityConfig:
+  #   clientIP:
+  #     timeoutSeconds: 10800  # 3 hours
+
+---
+# ============================================================================
+# Service Usage Notes
+# ============================================================================
+# To deploy this service:
+#   kubectl apply -f service.yaml
+#
+# To get service details:
+#   kubectl get svc static-site
+#   kubectl describe svc static-site
+#
+# To get the NodePort:
+#   kubectl get svc static-site -o jsonpath='{.spec.ports[0].nodePort}'
+#
+# To access the application:
+#   http://<any-worker-node-ip>:<nodeport>
+#   Example: http://192.168.0.31:30080
+#
+# To test from within cluster:
+#   kubectl run test --rm -it --image=busybox -- wget -O- http://static-site
+#
+# To delete service:
+#   kubectl delete svc static-site

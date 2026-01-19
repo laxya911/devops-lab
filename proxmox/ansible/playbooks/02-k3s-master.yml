@@ -1,0 +1,186 @@
+################################################################################
+# ANSIBLE PLAYBOOK 02: K3S MASTER NODE SETUP (PROXMOX SAFE)
+################################################################################
+
+---
+- name: Setup Kubernetes Master Node (K3s)
+  hosts: kubernetes_master
+  become: true
+  gather_facts: true
+
+  vars:
+    provision_user: ansible
+    k3s_version: "v1.28.3+k3s1"
+    k3s_install_script: /tmp/install_k3s.sh
+
+    kubeconfig_dir: "/home/{{ provision_user }}/.kube"
+    kubeconfig_path: "/home/{{ provision_user }}/.kube/config"
+
+  tasks:
+    # ============================================================================
+    # FIREWALL PREPARATION (OPEN BEFORE K3S)
+    # ============================================================================
+
+    - name: Allow Kubernetes API
+      ufw:
+        rule: allow
+        port: '6443'
+        proto: tcp
+
+    - name: Allow Flannel VXLAN
+      ufw:
+        rule: allow
+        port: '8472'
+        proto: udp
+
+    - name: Allow kubelet API
+      ufw:
+        rule: allow
+        port: '10250'
+        proto: tcp
+
+    - name: Allow NodePort range
+      ufw:
+        rule: allow
+        port: '30000:32767'
+        proto: tcp
+
+    - name: Allow loopback traffic
+      ufw:
+        rule: allow
+        interface: lo
+        direction: in
+
+    # ============================================================================
+    # PRE-CHECK
+    # ============================================================================
+
+    - name: Check if K3s is already installed
+      stat:
+        path: /usr/local/bin/k3s
+      register: k3s_binary
+
+    # ============================================================================
+    # INSTALL K3S MASTER
+    # ============================================================================
+
+    - name: Download K3s install script
+      get_url:
+        url: https://get.k3s.io
+        dest: "{{ k3s_install_script }}"
+        mode: '0755'
+      when: not k3s_binary.stat.exists
+
+    - name: Install K3s master
+      shell: sh {{ k3s_install_script }}
+      when: not k3s_binary.stat.exists
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+        INSTALL_K3S_EXEC: >-
+          server
+          --node-ip={{ ansible_host }}
+          --advertise-address={{ ansible_host }}
+          --disable traefik
+          --disable servicelb
+          --flannel-backend=vxlan
+
+    - name: Ensure K3s service is running
+      systemd:
+        name: k3s
+        state: started
+        enabled: yes
+
+    # ============================================================================
+    # WAIT FOR K3S API
+    # ============================================================================
+
+    - name: Wait for K3s API
+      wait_for:
+        host: "{{ ansible_host }}"
+        port: 6443
+        timeout: 300
+
+    - name: Verify K3s responds
+      shell: kubectl get nodes
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      register: k3s_ready
+      until: k3s_ready.rc == 0
+      retries: 30
+      delay: 10
+
+    # ============================================================================
+    # KUBECONFIG FOR ANSIBLE USER
+    # ============================================================================
+
+    - name: Create kubeconfig directory
+      file:
+        path: "{{ kubeconfig_dir }}"
+        state: directory
+        owner: "{{ provision_user }}"
+        group: "{{ provision_user }}"
+        mode: '0755'
+
+    - name: Copy kubeconfig to ansible user
+      copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "{{ kubeconfig_path }}"
+        owner: "{{ provision_user }}"
+        group: "{{ provision_user }}"
+        mode: '0600'
+        remote_src: yes
+
+    - name: Update kubeconfig server address
+      replace:
+        path: "{{ kubeconfig_path }}"
+        regexp: '127.0.0.1'
+        replace: "{{ ansible_host }}"
+
+    # ============================================================================
+    # BASE NAMESPACES
+    # ============================================================================
+
+    - name: Create base namespaces
+      shell: |
+        kubectl create namespace {{ item }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      loop:
+        - monitoring
+        - jenkins
+
+    # ============================================================================
+    # WORKER JOIN TOKEN (EXPORT FOR NEXT PLAYBOOK)
+    # ============================================================================
+
+    - name: Read worker join token
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_token_raw
+
+    - name: Set worker join token fact
+      set_fact:
+        k3s_worker_token: "{{ k3s_token_raw.content | b64decode | trim }}"
+
+    # ============================================================================
+    # FINAL VERIFICATION
+    # ============================================================================
+
+    - name: Show cluster info
+      shell: kubectl cluster-info
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      register: cluster_info
+
+    - debug:
+        msg: "{{ cluster_info.stdout }}"
+
+    - name: Show node list
+      shell: kubectl get nodes -o wide
+      environment:
+        KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+      register: nodes
+
+    - debug:
+        msg: "{{ nodes.stdout }}"

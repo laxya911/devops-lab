@@ -1,0 +1,16 @@
+jenkins:
+  systemMessage: "Jenkins configured by automation"
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "jenkins"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  location:
+    adminAddress: "admin@example.com"
+jenkinsUrl: "http://192.168.0.33:8080"

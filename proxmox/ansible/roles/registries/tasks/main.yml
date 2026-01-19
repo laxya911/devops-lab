@@ -1,0 +1,54 @@
+---
+# Render /etc/rancher/k3s/registries.yaml on k3s nodes and restart k3s services
+- name: Ensure registries config directory exists
+  file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Deploy registries.yaml
+  template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/k3s/registries.yaml
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart k3s service
+
+- name: Validate image pull via a test pod
+  vars:
+    test_image: "{{ registry_url | default(docker_registry_url | default('')) }}/alpine:3.18"
+  block:
+    - name: Create test namespace
+      command: kubectl create namespace registries-test --kubeconfig=/etc/rancher/k3s/k3s.yaml
+      register: create_ns
+      failed_when: false
+      changed_when: create_ns.rc == 0
+
+    - name: Run test pod to pull image from registry
+      command: kubectl run registries-test-pod -n registries-test --image={{ test_image }} --restart=Never -- /bin/sh -c 'sleep 30'
+      register: run_pod
+      failed_when: run_pod.rc != 0
+      changed_when: true
+      ignore_errors: true
+
+    - name: Wait for test pod to be scheduled
+      command: kubectl wait --for=condition=Initialized pod/registries-test-pod -n registries-test --kubeconfig=/etc/rancher/k3s/k3s.yaml --timeout=60s
+      register: wait_pod
+      failed_when: wait_pod.rc != 0
+      changed_when: false
+      ignore_errors: true
+
+    - name: Get test pod status
+      command: kubectl get pod registries-test-pod -n registries-test --kubeconfig=/etc/rancher/k3s/k3s.yaml -o json
+      register: pod_json
+      failed_when: false
+      changed_when: false
+
+    - name: Debug pod status
+      debug:
+        var: pod_json.stdout
+
+  when: registry_url is defined or docker_registry_url is defined

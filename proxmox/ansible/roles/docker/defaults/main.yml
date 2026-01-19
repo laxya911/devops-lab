@@ -1,0 +1,6 @@
+---
+# defaults for docker role
+insecure_registries: []
+registry_mirrors: []
+# tls_comment: set true to include commented TLS guidance in template
+tls_comment: true
