@@ -86,8 +86,8 @@ stage('Checkout') {
                 # Wait for container to start
                 sleep 5
                 
-                # Test if Nginx is responding
-                curl -f http://localhost:8888 || exit 1
+                # Test if Nginx is responding (use host IP since we're in Jenkins container)
+                curl -f http://192.168.0.33:8888 || exit 1
                 
                 # Cleanup test container
                 docker stop test-container
