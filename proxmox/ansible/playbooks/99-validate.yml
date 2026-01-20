@@ -23,7 +23,7 @@
 
 ################################################################################
 - name: Validate CI/CD host (Docker, Jenkins, Nexus)
-  hosts: cicd
+  hosts: jenkins_servers
   gather_facts: true
 
   tasks:
@@ -105,10 +105,10 @@
 
   tasks:
     - name: Create test namespace for registry validation
-      ansible.builtin.command:
-        cmd: kubectl create namespace registry-test --kubeconfig=/etc/rancher/k3s/k3s.yaml
+      ansible.builtin.shell:
+        cmd: kubectl get namespace registry-test --kubeconfig=/etc/rancher/k3s/k3s.yaml || kubectl create namespace registry-test --kubeconfig=/etc/rancher/k3s/k3s.yaml
       register: ck8s_ns
-      changed_when: "'already exists' not in ck8s_ns.stderr"
+      changed_when: "'Created' in ck8s_ns.stdout"
 
     - name: Launch a test pod that pulls from registry
       ansible.builtin.command:

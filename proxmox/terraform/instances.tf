@@ -268,14 +268,14 @@ ansible_user=${var.ssh_user}
 ansible_ssh_private_key_file=${var.ssh_private_key_path}
 
 [kubernetes_master]
-${proxmox_vm_qemu.kube_master.default_ipv4_address}
+kube-master ansible_host=${proxmox_vm_qemu.kube_master.default_ipv4_address}
 
 [kubernetes_workers]
-${proxmox_vm_qemu.kube_worker_1.default_ipv4_address}
-${proxmox_vm_qemu.kube_worker_2.default_ipv4_address}
+kube-worker-1 ansible_host=${proxmox_vm_qemu.kube_worker_1.default_ipv4_address}
+kube-worker-2 ansible_host=${proxmox_vm_qemu.kube_worker_2.default_ipv4_address}
 
 [jenkins_servers]
-${proxmox_vm_qemu.jenkins_nexus.default_ipv4_address}
+jenkins-nexus ansible_host=${proxmox_vm_qemu.jenkins_nexus.default_ipv4_address}
 
 [project_lab:children]
 kubernetes_master

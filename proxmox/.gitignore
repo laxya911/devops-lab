@@ -1,0 +1,39 @@
+# Terraform
+*.tfvars
+*.tfvars.json
+terraform.tfstate*
+.terraform/
+.terraform.lock.hcl
+*.tfplan
+
+# Ansible
+*.log
+ansible.log
+*.retry
+inventory.ini
+# Keep static inventory if specifically needed, but usually generated
+# ansible/inventory/static.yml
+
+# Environment & Secrets
+.env
+.env.*
+secrets.yml
+credentials
+*.pem
+*.key
+*.pub
+!ansible/files/*.pub # Only ignore if not specifically meant for distribution
+
+# OS/IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.bak
+.vagrant/
+
+# Misc
+node_modules/
+dist/
+build/
+*.tmp
