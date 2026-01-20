@@ -145,3 +145,53 @@
     - name: Report k3s-agent active state
       ansible.builtin.debug:
         msg: "k3s-agent on {{ inventory_hostname }} is {{ 'active' if agent_status.status.ActiveState == 'active' else 'not-active' }}"
+
+################################################################################
+- name: Validate Phase 2 Full-Stack Application
+  hosts: kubernetes_master
+  gather_facts: true
+
+  tasks:
+    - name: Check if phase2-fullstack-app deployment exists
+      ansible.builtin.command:
+        cmd: kubectl get deployment phase2-fullstack-app --kubeconfig=/etc/rancher/k3s/k3s.yaml
+      register: deployment_check
+      ignore_errors: true
+
+    - name: Report deployment status
+      ansible.builtin.debug:
+        msg: "Phase 2 deployment status: {{ 'Exists' if deployment_check.rc == 0 else 'Not found' }}"
+
+    - name: Check if phase2-fullstack-service exists
+      ansible.builtin.command:
+        cmd: kubectl get service phase2-fullstack-service --kubeconfig=/etc/rancher/k3s/k3s.yaml
+      register: service_check
+      ignore_errors: true
+
+    - name: Report service status
+      ansible.builtin.debug:
+        msg: "Phase 2 service status: {{ 'Exists' if service_check.rc == 0 else 'Not found' }}"
+
+    - name: Get pods for phase2 app
+      ansible.builtin.command:
+        cmd: kubectl get pods -l app=phase2-fullstack-app -o wide --kubeconfig=/etc/rancher/k3s/k3s.yaml
+      register: pods_check
+      ignore_errors: true
+
+    - name: Report pods status
+      ansible.builtin.debug:
+        msg: "Phase 2 pods:\n{{ pods_check.stdout | default('No pods found') }}"
+
+    - name: Check app health via service (if deployment exists)
+      ansible.builtin.uri:
+        url: "http://phase2-fullstack-service"
+        method: GET
+        status_code: 200
+      register: app_health
+      ignore_errors: true
+      when: deployment_check.rc == 0 and service_check.rc == 0
+
+    - name: Report app health
+      ansible.builtin.debug:
+        msg: "Phase 2 app health: {{ 'Healthy' if app_health.status == 200 else 'Unhealthy or not accessible' }}"
+      when: deployment_check.rc == 0 and service_check.rc == 0

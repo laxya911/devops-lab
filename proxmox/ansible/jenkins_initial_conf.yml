@@ -4,7 +4,7 @@ jenkins:
     local:
       allowsSignup: false
       users:
-        - id: "admin"
+        - id: "jenkins_admin"
           password: "jenkins"
   authorizationStrategy:
     loggedInUsersCanDoAnything:
@@ -12,5 +12,5 @@ jenkins:
 
 unclassified:
   location:
-    adminAddress: "admin@example.com"
+    adminAddress: "admin@fastline.in"
 jenkinsUrl: "http://192.168.0.33:8080"
