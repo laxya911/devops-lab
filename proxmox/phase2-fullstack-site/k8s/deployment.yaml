@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phase2-fullstack-app
+  labels:
+    app: phase2-fullstack-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: phase2-fullstack-app
+  template:
+    metadata:
+      labels:
+        app: phase2-fullstack-app
+    spec:
+      containers:
+      - name: phase2-fullstack-app
+        image: 192.168.0.33:5000/phase2-fullstack-app:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
