@@ -30,7 +30,7 @@ pipeline {
         K8S_NAMESPACE = 'default'                // Kubernetes namespace
         
         // Docker configuration
-        //DOCKER_BUILDKIT = '1'  // Enable BuildKit for faster builds
+        DOCKER_BUILDKIT = '1'  // Enable BuildKit for faster builds
     }
     
     // ========================================================================
