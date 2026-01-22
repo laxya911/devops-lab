@@ -30,20 +30,20 @@ echo "Initial admin password: $ADMIN_PASSWORD"
 curl -X PUT "${NEXUS_URL}/service/rest/v1/security/users/admin/change-password" \
   -H "Content-Type: application/json" \
   -u "admin:$ADMIN_PASSWORD" \
-  -d '{"password": "admin123"}'
+  -d '{"password": "nexus"}'
 
-echo "Admin password changed to admin123"
+echo "Admin password changed to nexus"
 
 # Enable anonymous access (optional)
 curl -X PUT "${NEXUS_URL}/service/rest/v1/security/anonymous" \
   -H "Content-Type: application/json" \
-  -u "admin:admin123" \
+  -u "admin:nexus" \
   -d '{"enabled": true}'
 
 # Create Docker hosted repository
 curl -X POST "${NEXUS_URL}/service/rest/v1/repositories/docker/hosted" \
   -H "Content-Type: application/json" \
-  -u "admin:admin123" \
+  -u "admin:nexus" \
   -d '{
     "name": "docker-hosted",
     "online": true,
@@ -64,7 +64,7 @@ echo "Docker hosted repository created"
 # Create Docker proxy repository for Docker Hub
 curl -X POST "${NEXUS_URL}/service/rest/v1/repositories/docker/proxy" \
   -H "Content-Type: application/json" \
-  -u "admin:admin123" \
+  -u "admin:nexus" \
   -d '{
     "name": "docker-proxy",
     "online": true,
@@ -102,7 +102,7 @@ echo "Docker proxy repository created"
 # Create Docker group repository
 curl -X POST "${NEXUS_URL}/service/rest/v1/repositories/docker/group" \
   -H "Content-Type: application/json" \
-  -u "admin:admin123" \
+  -u "admin:nexus" \
   -d '{
     "name": "docker-group",
     "online": true,

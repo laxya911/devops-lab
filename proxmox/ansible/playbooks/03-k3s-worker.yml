@@ -14,7 +14,7 @@
 
     # Dynamically pick the first master
     k3s_master: "{{ groups['kubernetes_master'][0] }}"
-    k3s_master_ip: "{{ hostvars[k3s_master].inventory_hostname }}"
+    k3s_master_ip: "{{ hostvars[k3s_master].ansible_host }}"
 
   tasks:
     # ============================================================================
@@ -49,7 +49,7 @@
       register: worker_token
 
     - set_fact:
-        k3s_token: "{{ worker_token.stdout }}"
+        k3s_token: "{{ worker_token.stdout | trim }}"
 
     # ============================================================================
     # PRE-CHECK
@@ -73,11 +73,14 @@
     - name: Create K3s agent config
       copy:
         dest: /etc/rancher/k3s/config.yaml
+        owner: root
+        group: root
         mode: '0600'
         content: |
           server: "https://{{ k3s_master_ip }}:6443"
           token: "{{ k3s_token }}"
-          node-ip: "{{ inventory_hostname}}"
+          node-ip: "{{ ansible_host }}"
+          flannel-iface: "{{ ansible_default_ipv4.interface }}"
           kubelet-arg:
             - "max-pods=110"
 
@@ -102,7 +105,7 @@
     - name: Enable and start K3s agent
       systemd:
         name: k3s-agent
-        state: started
+        state: restarted
         enabled: yes
         daemon_reload: yes
 

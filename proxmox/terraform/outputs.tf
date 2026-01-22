@@ -33,6 +33,15 @@ output "vm_names" {
   ]
 }
 
+output "ssh_commands" {
+  value = [
+    "ssh ubuntu@${proxmox_vm_qemu.kube_master.default_ipv4_address}",
+    "ssh ubuntu@${proxmox_vm_qemu.kube_worker_1.default_ipv4_address}",
+    "ssh ubuntu@${proxmox_vm_qemu.kube_worker_2.default_ipv4_address}",
+    "ssh ubuntu@${proxmox_vm_qemu.jenkins_nexus.default_ipv4_address}"
+  ]
+}
+
 output "vm_gateways" {
   value = [
     "192.168.0.1",
@@ -42,30 +51,12 @@ output "vm_gateways" {
   ]
 }
 
-# output "vm_ips" {
-#   value = [
-#     proxmox_vm_qemu.kube_master.default_ipv4_address,
-#     proxmox_vm_qemu.kube_worker_1.default_ipv4_address,
-#     proxmox_vm_qemu.kube_worker_2.default_ipv4_address,
-#     proxmox_vm_qemu.jenkins_nexus.default_ipv4_address
-#   ]
-# }
-
 output "vm_ips" {
   value = [
     proxmox_vm_qemu.kube_master.default_ipv4_address,
     proxmox_vm_qemu.kube_worker_1.default_ipv4_address,
     proxmox_vm_qemu.kube_worker_2.default_ipv4_address,
     proxmox_vm_qemu.jenkins_nexus.default_ipv4_address
-  ]
-}
-
-output "ssh_commands" {
-  value = [
-    "ssh ${var.ssh_user}@${proxmox_vm_qemu.kube_master.default_ipv4_address}",
-    "ssh ${var.ssh_user}@${proxmox_vm_qemu.kube_worker_1.default_ipv4_address}",
-    "ssh ${var.ssh_user}@${proxmox_vm_qemu.kube_worker_2.default_ipv4_address}",
-    "ssh ${var.ssh_user}@${proxmox_vm_qemu.jenkins_nexus.default_ipv4_address}"
   ]
 }
 

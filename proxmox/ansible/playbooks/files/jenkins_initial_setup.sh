@@ -29,12 +29,15 @@ fi
 
 echo "Initial admin password: $ADMIN_PASSWORD"
 
+ADMIN_USER="admin"
+
 # Create admin user and configure security using JCasC
 # First, install JCasC plugin
 echo "Installing JCasC plugin..."
-curl -X POST "${JENKINS_URL}/pluginManager/installPlugins" \
-  -u "admin:$ADMIN_PASSWORD" \
-  --data "plugin.configuration-as-code@latest"
+response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "${JENKINS_URL}/pluginManager/installPlugins" \
+  -u "$ADMIN_USER:$ADMIN_PASSWORD" \
+  --data "plugin.configuration-as-code@latest")
+echo "Casc install response: $response"
 
 # Wait for plugin installation
 sleep 30
@@ -46,9 +49,10 @@ if [ -f "$PLUGINS_FILE" ]; then
     if [[ $plugin =~ ^[^#].* ]]; then
       plugin_name=$(echo "$plugin" | cut -d':' -f1)
       echo "Installing plugin: $plugin_name"
-      curl -X POST "${JENKINS_URL}/pluginManager/installPlugins" \
-        -u "admin:$ADMIN_PASSWORD" \
-        --data "plugin.${plugin_name}@latest"
+      response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "${JENKINS_URL}/pluginManager/installPlugins" \
+        -u "$ADMIN_USER:$ADMIN_PASSWORD" \
+        --data "plugin.${plugin_name}@latest")
+      echo "Plugin $plugin_name install response: $response"
     fi
   done < "$PLUGINS_FILE"
 fi
@@ -59,15 +63,17 @@ sleep 60
 # Apply JCasC configuration
 if [ -f "$JCASC_FILE" ]; then
   echo "Applying JCasC configuration..."
-  curl -X POST "${JENKINS_URL}/configuration-as-code/apply" \
-    -u "admin:$ADMIN_PASSWORD" \
+  response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "${JENKINS_URL}/configuration-as-code/apply" \
+    -u "$ADMIN_USER:$ADMIN_PASSWORD" \
     -H "Content-Type: application/yaml" \
-    --data-binary "@$JCASC_FILE"
+    --data-binary "@$JCASC_FILE")
+  echo "Casc apply response: $response"
 fi
 
 # Restart Jenkins to apply changes
 echo "Restarting Jenkins..."
-curl -X POST "${JENKINS_URL}/safeRestart" \
-  -u "jenkins_admin:jenkins"
+response=$(curl -s -w "HTTPSTATUS:%{http_code}" -X POST "${JENKINS_URL}/safeRestart" \
+  -u "$ADMIN_USER:$ADMIN_PASSWORD")
+echo "Restart response: $response"
 
 echo "Jenkins initial configuration completed!"

@@ -202,5 +202,5 @@
             mode: '0755'
 
         - name: Verify kubectl installed
-          command: kubectl version --client --short
+          command: kubectl version --client
           changed_when: false

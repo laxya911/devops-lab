@@ -1,5 +1,5 @@
 ################################################################################
-# ANSIBLE PLAYBOOK 02: K3S MASTER NODE SETUP (PROXMOX SAFE)
+# PLAYBOOK 02: K3S MASTER NODE (UPDATED, IPV4-STABLE)
 ################################################################################
 
 ---
@@ -16,11 +16,18 @@
     kubeconfig_dir: "/home/{{ provision_user }}/.kube"
     kubeconfig_path: "/home/{{ provision_user }}/.kube/config"
 
-  tasks:
-    # ============================================================================
-    # FIREWALL PREPARATION (OPEN BEFORE K3S)
-    # ============================================================================
+  handlers:
+    - name: Restart k3s
+      systemd:
+        name: k3s
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
 
+  tasks:
+    # ----------------------------------------------------------------------------
+    # Firewall
+    # ----------------------------------------------------------------------------
     - name: Allow Kubernetes API
       ufw:
         rule: allow
@@ -51,19 +58,44 @@
         interface: lo
         direction: in
 
-    # ============================================================================
-    # PRE-CHECK
-    # ============================================================================
+    - name: Enable UFW safely
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
 
+    # ----------------------------------------------------------------------------
+    # Pre-check
+    # ----------------------------------------------------------------------------
     - name: Check if K3s is already installed
       stat:
         path: /usr/local/bin/k3s
       register: k3s_binary
 
-    # ============================================================================
-    # INSTALL K3S MASTER
-    # ============================================================================
+    # ----------------------------------------------------------------------------
+    # k3s config.yaml (forces IPv4 binding)
+    # ----------------------------------------------------------------------------
+    - name: Ensure k3s config directory exists
+      file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: '0755'
 
+    - name: Configure k3s server via config.yaml
+      copy:
+        dest: /etc/rancher/k3s/config.yaml
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          node-ip: "{{ ansible_host }}"
+          bind-address: "0.0.0.0"
+          advertise-address: "{{ ansible_host }}"
+      notify: Restart k3s
+
+    # ----------------------------------------------------------------------------
+    # Install K3s master (via installer)
+    # ----------------------------------------------------------------------------
     - name: Download K3s install script
       get_url:
         url: https://get.k3s.io
@@ -78,8 +110,6 @@
         INSTALL_K3S_VERSION: "{{ k3s_version }}"
         INSTALL_K3S_EXEC: >-
           server
-          --node-ip={{ ansible_host }}
-          --advertise-address={{ ansible_host }}
           --disable traefik
           --disable servicelb
           --flannel-backend=vxlan
@@ -90,17 +120,16 @@
         state: started
         enabled: yes
 
-    # ============================================================================
-    # WAIT FOR K3S API
-    # ============================================================================
-
-    - name: Wait for K3s API
+    # ----------------------------------------------------------------------------
+    # Wait for API
+    # ----------------------------------------------------------------------------
+    - name: Wait for K3s API (IPv4)
       wait_for:
         host: "{{ ansible_host }}"
         port: 6443
         timeout: 300
 
-    - name: Verify K3s responds
+    - name: Verify K3s responds via kubeconfig
       shell: kubectl get nodes
       environment:
         KUBECONFIG: /etc/rancher/k3s/k3s.yaml
@@ -109,10 +138,9 @@
       retries: 30
       delay: 10
 
-    # ============================================================================
-    # KUBECONFIG FOR ANSIBLE USER
-    # ============================================================================
-
+    # ----------------------------------------------------------------------------
+    # Kubeconfig for ansible user
+    # ----------------------------------------------------------------------------
     - name: Set readable permissions on k3s.yaml
       file:
         path: /etc/rancher/k3s/k3s.yaml
@@ -124,7 +152,7 @@
         state: directory
         owner: "{{ provision_user }}"
         group: "{{ provision_user }}"
-        mode: '0755'
+        mode: '0700'
 
     - name: Copy kubeconfig to ansible user
       copy:
@@ -135,16 +163,15 @@
         mode: '0600'
         remote_src: yes
 
-    - name: Update kubeconfig server address
+    - name: Update kubeconfig server address to master IPv4
       replace:
         path: "{{ kubeconfig_path }}"
         regexp: '127.0.0.1'
         replace: "{{ ansible_host }}"
 
-    # ============================================================================
-    # BASE NAMESPACES
-    # ============================================================================
-
+    # ----------------------------------------------------------------------------
+    # Base namespaces
+    # ----------------------------------------------------------------------------
     - name: Create base namespaces
       shell: |
         kubectl create namespace {{ item }} \
@@ -155,10 +182,9 @@
         - monitoring
         - jenkins
 
-    # ============================================================================
-    # WORKER JOIN TOKEN (EXPORT FOR NEXT PLAYBOOK)
-    # ============================================================================
-
+    # ----------------------------------------------------------------------------
+    # Worker join token (for worker playbook)
+    # ----------------------------------------------------------------------------
     - name: Read worker join token
       slurp:
         src: /var/lib/rancher/k3s/server/node-token
@@ -168,10 +194,9 @@
       set_fact:
         k3s_worker_token: "{{ k3s_token_raw.content | b64decode | trim }}"
 
-    # ============================================================================
-    # FINAL VERIFICATION
-    # ============================================================================
-
+    # ----------------------------------------------------------------------------
+    # Final verification
+    # ----------------------------------------------------------------------------
     - name: Show cluster info
       shell: kubectl cluster-info
       environment:

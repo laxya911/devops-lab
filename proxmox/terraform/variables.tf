@@ -95,7 +95,7 @@ variable "kube_master_memory" {
 }
 variable "kube_master_vmid" {
   description = "VMID for Master"
-  default     = 110
+  default     = 210
 }
 variable "kube_master_ip" {
   description = "IP/CIDR for Master (or 'dhcp')"
@@ -113,7 +113,7 @@ variable "kube_worker_1_memory" {
   default = 4096
 }
 variable "kube_worker_1_vmid" {
-  default = 111
+  default = 211
 }
 variable "kube_worker_1_ip" {
   default = "dhcp"
@@ -130,7 +130,7 @@ variable "kube_worker_2_memory" {
   default = 4096
 }
 variable "kube_worker_2_vmid" {
-  default = 112
+  default = 212
 }
 variable "kube_worker_2_ip" {
   default = "dhcp"
@@ -147,7 +147,7 @@ variable "jenkins_nexus_memory" {
   default = 4096
 }
 variable "jenkins_nexus_vmid" {
-  default = 113
+  default = 213
 }
 variable "jenkins_nexus_ip" {
   default = "dhcp"

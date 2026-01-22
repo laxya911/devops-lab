@@ -10,7 +10,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/your-repo/k8s-devops-lab.git'
+                git branch: 'feature/zero-touch-bootstrap', url: 'https://github.com/laxya911/k8s-devops-lab.git'
             }
         }
 
@@ -33,12 +33,13 @@ pipeline {
         stage('Deploy to K3s') {
             steps {
                 dir('proxmox/phase2-fullstack-site/k8s') {
-                    sh 'kubectl apply -f deployment.yaml'
-                    sh 'kubectl apply -f service.yaml'
+                    sh 'kubectl apply -f deployment.yaml --validate=false'
+                    sh 'kubectl apply -f service.yaml --validate=false'
                     sh 'kubectl rollout status deployment/phase2-fullstack-app'
                 }
             }
         }
+
 
         stage('Cleanup') {
             steps {

@@ -223,7 +223,7 @@ resource "null_resource" "wait_for_kube_master_ssh" {
   depends_on = [proxmox_vm_qemu.kube_master]
 
   provisioner "local-exec" {
-    command = "for i in $(seq 1 30); do echo 'Waiting for SSH on ${var.kube_master_ip}:22 (try $i)...'; nc -z -w3 ${split("/", var.kube_master_ip)[0]} 22 && exit 0; sleep 10; done; echo 'ERROR: SSH not available on ${var.kube_master_ip}' >&2; exit 1"
+    command = "sleep 30; for i in $(seq 1 60); do echo 'Waiting for SSH on ${var.kube_master_ip}:22 (try $i)...'; nc -z -w3 ${split("/", var.kube_master_ip)[0]} 22 && exit 0; sleep 10; done; echo 'ERROR: SSH not available on ${var.kube_master_ip}' >&2; exit 1"
   }
 }
 

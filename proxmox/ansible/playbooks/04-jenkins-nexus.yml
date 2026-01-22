@@ -224,6 +224,31 @@
         - { src: 'plugins.txt', dest: '/tmp/plugins.txt', mode: '0644' }
         - { src: 'jenkins_initial_setup.sh', dest: '/tmp/jenkins_initial_setup.sh', mode: '0755' }
 
+    # - name: Start Jenkins container
+    #   docker_container:
+    #     name: jenkins
+    #     image: "{{ jenkins_image }}"
+    #     user: "0:{{ lookup('ansible.builtin.pipe', 'getent group docker | cut -d: -f3') | default('998', true) }}"
+    #     state: started
+    #     restart_policy: always
+    #     ports:
+    #       - "{{ jenkins_port }}:8080"
+    #     volumes:
+    #       - "{{ jenkins_home }}:/var/jenkins_home"
+    #       - /var/run/docker.sock:/var/run/docker.sock
+    #       - "{{ jenkins_tools_dir }}/kubectl:/usr/local/bin/kubectl:ro"
+    #       - "{{ jenkins_tools_dir }}/docker-cli:/usr/local/bin/docker:ro"
+    #       - "{{ jenkins_tools_dir }}/cli-plugins:/usr/local/lib/docker/cli-plugins:ro"
+    #       - "{{ kubeconfig_host_path | dirname }}:/home/ansible/.kube:ro"
+    #       - /tmp/jenkins_initial_conf.yml:/tmp/jenkins_initial_conf.yml:ro
+    #       - /tmp/plugins.txt:/tmp/plugins.txt:ro
+    #       - /tmp/jenkins_initial_setup.sh:/tmp/jenkins_initial_setup.sh:ro
+    #     networks:
+    #       - name: cicd-network
+    #     env:
+    #       JAVA_OPTS: "-Djenkins.install.runSetupWizard=true"
+    #       TZ: "Asia/Kolkata"
+
     - name: Start Jenkins container
       docker_container:
         name: jenkins
@@ -239,6 +264,7 @@
           - "{{ jenkins_tools_dir }}/kubectl:/usr/local/bin/kubectl:ro"
           - "{{ jenkins_tools_dir }}/docker-cli:/usr/local/bin/docker:ro"
           - "{{ jenkins_tools_dir }}/cli-plugins:/usr/local/lib/docker/cli-plugins:ro"
+          # kubeconfig mount (same path inside as on host)
           - "{{ kubeconfig_host_path | dirname }}:/home/ansible/.kube:ro"
           - /tmp/jenkins_initial_conf.yml:/tmp/jenkins_initial_conf.yml:ro
           - /tmp/plugins.txt:/tmp/plugins.txt:ro
@@ -248,6 +274,8 @@
         env:
           JAVA_OPTS: "-Djenkins.install.runSetupWizard=true"
           TZ: "Asia/Kolkata"
+          KUBECONFIG: "/home/ansible/.kube/config"
+
 
     - name: Wait for Jenkins to be available
       wait_for:
@@ -256,7 +284,7 @@
         timeout: 300
 
     - name: Run Jenkins initial setup script
-      command: docker exec jenkins bash /tmp/jenkins_initial_setup.sh
+      command: timeout 600 docker exec jenkins bash /tmp/jenkins_initial_setup.sh
       register: jenkins_setup
       ignore_errors: yes
 
