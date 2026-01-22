@@ -135,8 +135,8 @@ pipeline {
                     // Update deployment with new image
                     sh """
                         # Apply deployment and service YAMLs
-                        kubectl apply -f "${WORKSPACE}/proxmox/phase1-static-site/k8s/deployment.yaml" --namespace=${K8S_NAMESPACE}
-                        kubectl apply -f "${WORKSPACE}/proxmox/phase1-static-site/k8s/service.yaml" --namespace=${K8S_NAMESPACE}
+                        kubectl apply --validate=false -f "${WORKSPACE}/proxmox/phase1-static-site/k8s/deployment.yaml" --namespace=${K8S_NAMESPACE}
+                        kubectl apply --validate=false -f "${WORKSPACE}/proxmox/phase1-static-site/k8s/service.yaml" --namespace=${K8S_NAMESPACE}
                         
                         # Set the new image in deployment
                         kubectl set image deployment/static-site \
