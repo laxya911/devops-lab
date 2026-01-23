@@ -258,6 +258,11 @@
         regexp: '^KUBECONFIG='
         state: present
 
+    - name: Get Docker group GID
+      shell: "getent group docker | cut -d: -f3"
+      register: docker_gid
+      changed_when: false
+
     - name: Start Jenkins container
       docker_container:
         name: jenkins
@@ -267,11 +272,14 @@
         restart_policy: always
         ports:
           - "8080:8080"
+        groups:
+          - "{{ docker_gid.stdout }}"
         volumes:
           - "{{ jenkins_home }}:/var/jenkins_home"
           - /var/run/docker.sock:/var/run/docker.sock
           - "{{ jenkins_tools_dir }}/kubectl:/usr/local/bin/kubectl:ro"
           - "{{ jenkins_tools_dir }}/docker/docker:/usr/local/bin/docker:ro"
+          - "{{ jenkins_tools_dir }}/cli-plugins:/usr/lib/docker/cli-plugins:ro"
           - "/etc/rancher/k3s:/home/ansible/.kube:ro"
         env:
           CASC_JENKINS_CONFIG: /var/jenkins_home/casc
