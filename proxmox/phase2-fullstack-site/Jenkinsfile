@@ -14,7 +14,7 @@ pipeline {
         IMAGE_TAG      = "${env.BUILD_NUMBER}"         // Use Jenkins build number as tag
         FULL_IMAGE_NAME = "${env.NEXUS_REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
         
-        KUBECONFIG     = '/home/ansible/.kube/config'
+        KUBECONFIG     = '/home/ansible/.kube/k3s.yaml'
     }
 
     stages {
