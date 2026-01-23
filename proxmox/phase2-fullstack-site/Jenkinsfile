@@ -2,18 +2,12 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = '192.168.0.33:5000/phase2-fullstack-app'
+        DOCKER_IMAGE = '192.168.0.213:5000/phase2-fullstack-app'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
-        KUBECONFIG = credentials('kubeconfig')
+        KUBECONFIG = '/home/ansible/.kube/config'
     }
 
     stages {
-        stage('Checkout') {
-            steps {
-                git branch: 'feature/zero-touch-bootstrap', url: 'https://github.com/laxya911/k8s-devops-lab.git'
-            }
-        }
-
         stage('Build Docker Image') {
             steps {
                 dir('proxmox/phase2-fullstack-site') {

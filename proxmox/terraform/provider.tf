@@ -16,7 +16,7 @@ terraform {
 
 # Configure the Proxmox Provider
 provider "proxmox" {
-  # URL of your Proxmox API (e.g., https://192.168.0.20:8006/api2/json)
+  # URL of Proxmox API (e.g., https://192.168.0.20:8006/api2/json)
   pm_api_url = var.pm_api_url
 
   # Credentials (set via variables or env vars)

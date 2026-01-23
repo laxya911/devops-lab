@@ -137,6 +137,43 @@
         KUBECONFIG: "/home/{{ provision_user }}/.kube/config"
 
     # ============================================================================
+    # KUBECONFIG DISTRIBUTION
+    # ============================================================================
+
+    - name: Ensure k3s directory exists on worker
+      file:
+        path: "/etc/rancher/k3s"
+        state: directory
+        mode: '0755'
+
+    - name: Fetch kubeconfig from master to worker
+      slurp:
+        src: "/home/{{ provision_user }}/.kube/config"
+      delegate_to: "{{ k3s_master }}"
+      register: kubeconfig_content
+
+    - name: Write kubeconfig to worker
+      copy:
+        content: "{{ kubeconfig_content.content | b64decode }}"
+        dest: "/etc/rancher/k3s/k3s.yaml"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Set global KUBECONFIG in /etc/environment
+      lineinfile:
+        path: /etc/environment
+        line: 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml'
+        regexp: '^KUBECONFIG='
+        state: present
+
+    - name: Remove KUBECONFIG from .bashrc
+      lineinfile:
+        path: "/home/{{ provision_user }}/.bashrc"
+        regexp: '^export KUBECONFIG='
+        state: absent
+
+    # ============================================================================
     # VERIFICATION
     # ============================================================================
 

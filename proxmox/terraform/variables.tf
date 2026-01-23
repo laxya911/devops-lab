@@ -144,7 +144,7 @@ variable "jenkins_nexus_cores" {
   default = 2
 }
 variable "jenkins_nexus_memory" {
-  default = 4096
+  default = 8192
 }
 variable "jenkins_nexus_vmid" {
   default = 213

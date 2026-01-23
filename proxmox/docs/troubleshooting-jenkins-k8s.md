@@ -32,7 +32,7 @@ It also outlines how these issues **should have been avoided** through better **
 
 - **K3s**: Kubernetes distribution (containerd runtime)
 - **Jenkins**: CI/CD runner on `jenkins-nexus`
-- **Nexus**: Docker registry (`192.168.0.33:5000`)
+- **Nexus**: Docker registry (`192.168.0.213:5000`)
 - **Registry Type**: HTTP (insecure)
 - **Deployment Model**:
 

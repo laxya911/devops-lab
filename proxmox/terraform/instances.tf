@@ -40,7 +40,6 @@ resource "proxmox_vm_qemu" "kube_master" {
   sshkeys    = var.ssh_public_key
 
   # Static IP from variables.tf/terraform.tfvars
-  # Example: kube_master_ip = "192.168.0.30/24"
   ipconfig0 = "ip=${var.kube_master_ip},gw=${var.gateway}"
 
   # Disk Override (Template has smaller disk)

@@ -7,7 +7,7 @@
 # - Nexus acts as Docker registry (port 5000)
 # - All K3s nodes trust Nexus registry for pulling images
 # - Firewall rules configured
-# - Fully automated plug-and-play setup
+# - Fully automated plug-and-play setup for nexus
 ################################################################################
 
 ---
@@ -19,8 +19,8 @@
   vars:
     jenkins_port: 8080
     jenkins_home: /opt/jenkins
-    jenkins_image: jenkins/jenkins:lts
-    nexus_image: sonatype/nexus3:latest
+    jenkins_image: jenkins/jenkins:2.541.1-lts
+    nexus_image: sonatype/nexus3:3.87.2
     nexus_port: 8081
     nexus_docker_port: 5000
     nexus_data: /opt/nexus
@@ -30,9 +30,15 @@
     kubeconfig_host_path: /home/ansible/.kube/config
 
     # Versions for kubectl + docker CLI (adjust to your k3s version)
-    kubectl_version: v1.30.0
-    docker_cli_version: 25.0.5
-    docker_buildx_version: v0.14.0
+    kubectl_version: v1.35.0
+    docker_cli_version: 29.1.5
+    docker_buildx_version: v0.31.0
+
+  handlers:
+    - name: Restart Docker
+      systemd:
+        name: docker
+        state: restarted
 
   tasks:
     # --------------------------------------------------------------------------
@@ -72,6 +78,16 @@
         name: docker
         state: started
         enabled: yes
+
+    - name: Configure Docker insecure registry
+      copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "insecure-registries": ["{{ ansible_host }}:5000", "jenkins-nexus:5000"]
+          }
+        mode: '0644'
+      notify: Restart Docker
 
     - name: Add ansible user to docker group
       user:
@@ -169,7 +185,7 @@
         state: directory
         owner: ansible
         group: ansible
-        mode: '0700'
+        mode: '0755'
       when: kubeconfig_host_path is defined
 
     - name: Debug kubeconfig variables
@@ -178,7 +194,7 @@
 
     - name: Fetch kubeconfig from k8s master
       slurp:
-        src: /home/ansible/.kube/config
+        src: /etc/rancher/k3s/k3s.yaml
       register: kubeconfig_content
       delegate_to: "{{ groups['kubernetes_master'][0] }}"
       when: kubeconfig_host_path is defined
@@ -194,7 +210,7 @@
         dest: "{{ kubeconfig_host_path }}"
         owner: ansible
         group: ansible
-        mode: '0600'
+        mode: '0644'
         force: yes
       when: 
         - kubeconfig_host_path is defined
@@ -214,142 +230,197 @@
     # --------------------------------------------------------------------------
     # Jenkins
     # --------------------------------------------------------------------------
-    - name: Copy Jenkins initial config files
-      copy:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-        mode: "{{ item.mode }}"
-      loop:
-        - { src: 'jenkins_initial_conf.yml', dest: '/tmp/jenkins_initial_conf.yml', mode: '0644' }
-        - { src: 'plugins.txt', dest: '/tmp/plugins.txt', mode: '0644' }
-        - { src: 'jenkins_initial_setup.sh', dest: '/tmp/jenkins_initial_setup.sh', mode: '0755' }
+    
+    - name: Check if Jenkins is already initialized
+      stat:
+        path: "{{ jenkins_home }}/config.xml"
+      register: jenkins_initialized
+    
+    - name: Ensure k3s directory exists on CI host
+      file:
+        path: "/etc/rancher/k3s"
+        state: directory
+        mode: '0755'
 
-    # - name: Start Jenkins container
-    #   docker_container:
-    #     name: jenkins
-    #     image: "{{ jenkins_image }}"
-    #     user: "0:{{ lookup('ansible.builtin.pipe', 'getent group docker | cut -d: -f3') | default('998', true) }}"
-    #     state: started
-    #     restart_policy: always
-    #     ports:
-    #       - "{{ jenkins_port }}:8080"
-    #     volumes:
-    #       - "{{ jenkins_home }}:/var/jenkins_home"
-    #       - /var/run/docker.sock:/var/run/docker.sock
-    #       - "{{ jenkins_tools_dir }}/kubectl:/usr/local/bin/kubectl:ro"
-    #       - "{{ jenkins_tools_dir }}/docker-cli:/usr/local/bin/docker:ro"
-    #       - "{{ jenkins_tools_dir }}/cli-plugins:/usr/local/lib/docker/cli-plugins:ro"
-    #       - "{{ kubeconfig_host_path | dirname }}:/home/ansible/.kube:ro"
-    #       - /tmp/jenkins_initial_conf.yml:/tmp/jenkins_initial_conf.yml:ro
-    #       - /tmp/plugins.txt:/tmp/plugins.txt:ro
-    #       - /tmp/jenkins_initial_setup.sh:/tmp/jenkins_initial_setup.sh:ro
-    #     networks:
-    #       - name: cicd-network
-    #     env:
-    #       JAVA_OPTS: "-Djenkins.install.runSetupWizard=true"
-    #       TZ: "Asia/Kolkata"
+    - name: Write kubeconfig to CI host
+      copy:
+        content: "{{ kubeconfig_content.content | b64decode }}"
+        dest: "/etc/rancher/k3s/k3s.yaml"
+        owner: root
+        group: root
+        mode: '0644'
+      when: kubeconfig_host_path is defined
+
+    - name: Set global KUBECONFIG in /etc/environment
+      lineinfile:
+        path: /etc/environment
+        line: 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml'
+        regexp: '^KUBECONFIG='
+        state: present
 
     - name: Start Jenkins container
       docker_container:
         name: jenkins
         image: "{{ jenkins_image }}"
-        user: "0:{{ lookup('ansible.builtin.pipe', 'getent group docker | cut -d: -f3') | default('998', true) }}"
+        network_mode: cicd-network
         state: started
         restart_policy: always
         ports:
-          - "{{ jenkins_port }}:8080"
+          - "8080:8080"
         volumes:
           - "{{ jenkins_home }}:/var/jenkins_home"
           - /var/run/docker.sock:/var/run/docker.sock
           - "{{ jenkins_tools_dir }}/kubectl:/usr/local/bin/kubectl:ro"
-          - "{{ jenkins_tools_dir }}/docker-cli:/usr/local/bin/docker:ro"
-          - "{{ jenkins_tools_dir }}/cli-plugins:/usr/local/lib/docker/cli-plugins:ro"
-          # kubeconfig mount (same path inside as on host)
-          - "{{ kubeconfig_host_path | dirname }}:/home/ansible/.kube:ro"
-          - /tmp/jenkins_initial_conf.yml:/tmp/jenkins_initial_conf.yml:ro
-          - /tmp/plugins.txt:/tmp/plugins.txt:ro
-          - /tmp/jenkins_initial_setup.sh:/tmp/jenkins_initial_setup.sh:ro
-        networks:
-          - name: cicd-network
+          - "{{ jenkins_tools_dir }}/docker/docker:/usr/local/bin/docker:ro"
+          - "/etc/rancher/k3s:/home/ansible/.kube:ro"
         env:
-          JAVA_OPTS: "-Djenkins.install.runSetupWizard=true"
+          CASC_JENKINS_CONFIG: /var/jenkins_home/casc
           TZ: "Asia/Kolkata"
-          KUBECONFIG: "/home/ansible/.kube/config"
+          KUBECONFIG: "/home/ansible/.kube/k3s.yaml"
 
+    - name: Check if Jenkins initial admin password exists
+      stat:
+        path: "{{ jenkins_home }}/secrets/initialAdminPassword"
+      register: jenkins_pw_file
+
+    - name: Read Jenkins initial admin password
+      command: cat {{ jenkins_home }}/secrets/initialAdminPassword
+      register: jenkins_admin_password
+      when: jenkins_pw_file.stat.exists
+
+    - name: Display Jenkins initial admin password
+      debug:
+        msg: "Jenkins initial admin password: {{ jenkins_admin_password.stdout }}"
+      when: jenkins_pw_file.stat.exists
 
     - name: Wait for Jenkins to be available
       wait_for:
         host: "{{ ansible_host }}"
         port: "{{ jenkins_port }}"
         timeout: 300
-
-    - name: Run Jenkins initial setup script
-      command: timeout 600 docker exec jenkins bash /tmp/jenkins_initial_setup.sh
-      register: jenkins_setup
-      ignore_errors: yes
-
-    - name: Display Jenkins setup output
-      debug:
-        msg: "{{ jenkins_setup.stdout | default('No output') }}"
-
     # --------------------------------------------------------------------------
     # Nexus
     # --------------------------------------------------------------------------
-    - name: Copy Nexus initial setup script
-      copy:
-        src: nexus_initial_setup.sh
-        dest: /tmp/nexus_initial_setup.sh
-        mode: '0755'
-
+    
     - name: Start Nexus container
       docker_container:
         name: nexus
         image: "{{ nexus_image }}"
         state: started
         restart_policy: always
+        network_mode: cicd-network
         ports:
           - "{{ nexus_port }}:8081"
           - "{{ nexus_docker_port }}:5000"
         volumes:
           - "{{ nexus_data }}:/nexus-data"
-          - /tmp/nexus_initial_setup.sh:/tmp/nexus_initial_setup.sh:ro
-        networks:
-          - name: cicd-network
 
-    - name: Wait for Nexus to be available
-      wait_for:
-        host: "{{ ansible_host }}"
-        port: "{{ nexus_port }}"
-        timeout: 600
+    - name: Wait for Nexus API to be ready
+      uri:
+        url: "http://{{ ansible_host }}:{{ nexus_port }}/service/rest/v1/status"
+        status_code: 200
+      register: nexus_status
+      retries: 30
+      delay: 10
+      until: nexus_status.status == 200
 
-    - name: Run Nexus initial setup script
-      command: docker exec nexus bash /tmp/nexus_initial_setup.sh
-      register: nexus_setup
-      ignore_errors: yes
+    - name: Check if Nexus initial admin password exists
+      command: docker exec nexus test -f /nexus-data/admin.password
+      register: nexus_pw_file
+      failed_when: false
+      changed_when: false
 
-    - name: Display Nexus setup output
+    - name: Read Nexus initial admin password
+      command: docker exec nexus cat /nexus-data/admin.password
+      register: nexus_admin_password
+      when: nexus_pw_file.rc == 0
+
+    - name: Display initial admin password
       debug:
-        msg: "{{ nexus_setup.stdout | default('No output') }}"
+        msg: "Initial admin password: {{ nexus_admin_password.stdout }}"
+      when:
+        - nexus_admin_password is defined
+        - nexus_admin_password.stdout is defined
 
-    # --------------------------------------------------------------------------
-    # Firewall
-    # --------------------------------------------------------------------------
-    - name: Allow SSH, Jenkins, Nexus and Registry ports
-      ufw:
-        rule: allow
-        port: "{{ item }}"
-        proto: tcp
-      loop:
-        - 22
-        - "{{ jenkins_port }}"
-        - "{{ nexus_port }}"
-        - "{{ nexus_docker_port }}"
+    - name: Change Nexus admin password
+      uri:
+        url: "http://{{ ansible_host }}:{{ nexus_port }}/service/rest/v1/security/users/admin/change-password"
+        method: PUT
+        user: admin
+        password: "{{ nexus_admin_password.stdout }}"
+        force_basic_auth: yes
+        headers:
+          Content-Type: text/plain
+        body: nexus
+        status_code: 204
+      when:
+        - nexus_admin_password is defined
+        - nexus_admin_password.stdout is defined
 
-    - name: Enable UFW safely
-      ufw:
-        state: enabled
-        policy: deny
-        direction: incoming
+
+    - name: Enable anonymous access
+      uri:
+        url: "http://{{ ansible_host }}:{{ nexus_port }}/service/rest/v1/security/anonymous"
+        method: PUT
+        user: admin
+        password: nexus
+        force_basic_auth: yes
+        body:
+          enabled: true
+          userId: anonymous
+          realmName: NexusAuthorizingRealm
+        body_format: json
+        status_code: 200
+
+    - name: Enable Docker Bearer Token Realm
+      uri:
+        url: "http://{{ ansible_host }}:{{ nexus_port }}/service/rest/v1/security/realms/active"
+        method: PUT
+        user: admin
+        password: nexus
+        force_basic_auth: yes
+        body:
+          - NexusAuthenticatingRealm
+          - DockerToken
+        body_format: json
+        status_code: 204
+
+    - name: Get existing repositories
+      uri:
+        url: "http://{{ ansible_host }}:{{ nexus_port }}/service/rest/v1/repositories"
+        method: GET
+        user: admin
+        password: nexus
+        force_basic_auth: yes
+      register: existing_repos
+
+    - set_fact:
+        repo_names: "{{ existing_repos.json | map(attribute='name') | list }}"
+    
+    
+    - name: Create Docker hosted repository
+      uri:
+        url: "http://{{ ansible_host }}:{{ nexus_port }}/service/rest/v1/repositories/docker/hosted"
+        method: POST
+        user: admin
+        password: nexus
+        force_basic_auth: yes
+        body:
+          name: docker-hosted
+          online: true
+          storage:
+            blobStoreName: default
+            strictContentTypeValidation: true
+            writePolicy: ALLOW
+          docker:
+            v1Enabled: false
+            forceBasicAuth: true
+            httpPort: "{{ nexus_docker_port }}"
+        body_format: json
+        status_code: 201
+      when: "'docker-hosted' not in repo_names"
+
+    
 
 ################################################################################
 # Configure K3s nodes to trust Nexus registry
@@ -361,7 +432,7 @@
   gather_facts: true
 
   vars:
-    registry_host: "{{ groups['jenkins_servers'][0] }}"
+    registry_host: "{{ hostvars[groups['jenkins_servers'][0]].ansible_host }}"
     registry_port: 5000
     registry_yaml_path: /etc/rancher/k3s/registries.yaml
 
@@ -389,6 +460,10 @@
             "{{ registry_host }}:{{ registry_port }}":
               endpoint:
                 - "http://{{ registry_host }}:{{ registry_port }}"
+          configs:
+            "{{ registry_host }}:{{ registry_port }}":
+              tls:
+                insecure_skip_verify: true
 
     - name: Restart K3s server on master
       systemd:

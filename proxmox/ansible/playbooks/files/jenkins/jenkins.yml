@@ -1,16 +1,18 @@
 jenkins:
   systemMessage: "Jenkins configured by automation"
+
   securityRealm:
     local:
       allowsSignup: false
       users:
         - id: "jenkins_admin"
           password: "jenkins"
+
   authorizationStrategy:
     loggedInUsersCanDoAnything:
       allowAnonymousRead: false
 
 unclassified:
   location:
+    url: "http://192.168.0.213:8080"
     adminAddress: "admin@fastline.in"
-jenkinsUrl: "http://192.168.0.213:8080"

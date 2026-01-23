@@ -1,114 +1,65 @@
-# ============================================================================
-# Kubernetes Deployment Configuration
-# ============================================================================
-# This file defines how the static-site application should be deployed
-# in the Kubernetes cluster
-
-apiVersion: apps/v1  # API version for Deployment resource
-kind: Deployment     # Resource type
+apiVersion: apps/v1  
+kind: Deployment     
 metadata:
-  name: static-site  # Name of the deployment
+  name: static-site  
   labels:
-    app: static-site      # Label for organizing resources
-    phase: phase1         # Indicates this is Phase 1 app
-    tier: frontend        # Application tier
+    app: static-site      
+    phase: phase1         
+    tier: frontend        
 spec:
-  # ============================================================================
-  # Replica Configuration
-  # ============================================================================
-  replicas: 3  # Number of pod replicas to run (for high availability)
+  replicas: 3
   
-  # ============================================================================
-  # Selector - How deployment finds its pods
-  # ============================================================================
   selector:
     matchLabels:
-      app: static-site  # Must match pod template labels below
+      app: static-site  
   
-  # ============================================================================
-  # Deployment Strategy
-  # ============================================================================
   strategy:
-    type: RollingUpdate  # Update pods gradually (zero-downtime)
+    type: RollingUpdate  
     rollingUpdate:
-      maxSurge: 1        # Max number of extra pods during update
-      maxUnavailable: 1  # Max number of unavailable pods during update
-  
-  # ============================================================================
-  # Pod Template - Defines what each pod should look like
-  # ============================================================================
+      maxSurge: 1        
+      maxUnavailable: 1  
   template:
     metadata:
       labels:
-        app: static-site  # Labels for the pods (must match selector)
+        app: static-site  
         phase: phase1
         tier: frontend
     spec:
-      # ========================================================================
-      # Container Configuration
-      # ========================================================================
       containers:
-      - name: nginx  # Container name
-        
-        # Image to use (will be updated by Jenkins pipeline)
-        # Format: <nexus-registry>/<image>:<tag>
-        image: 192.168.0.33:5000/static-site:latest
-        
-        # Image pull policy
-        imagePullPolicy: Always  # Always pull latest image
-        
-        # ======================================================================
-        # Port Configuration
-        # ======================================================================
+      - name: nginx  
+        image: 192.168.0.213:5000/static-site:latest
+        imagePullPolicy: Always  
         ports:
-        - containerPort: 80  # Port the container listens on
-          name: http         # Name for the port (useful for services)
+        - containerPort: 80  
+          name: http         
           protocol: TCP
         
-        # ======================================================================
-        # Resource Limits & Requests
-        # ======================================================================
-        # Requests: Minimum resources guaranteed to the pod
-        # Limits: Maximum resources the pod can use
         resources:
           requests:
-            memory: "64Mi"   # Minimum 64MB RAM
-            cpu: "100m"      # Minimum 0.1 CPU cores (100 millicores)
+            memory: "64Mi"   
+            cpu: "100m"      
           limits:
-            memory: "128Mi"  # Maximum 128MB RAM
-            cpu: "200m"      # Maximum 0.2 CPU cores
+            memory: "128Mi"  
+            cpu: "200m"      
         
-        # ======================================================================
-        # Health Checks
-        # ======================================================================
-        # Liveness Probe: Is the container alive?
-        # If this fails, Kubernetes will restart the container
         livenessProbe:
           httpGet:
-            path: /          # Check root path
-            port: 80         # On port 80
-          initialDelaySeconds: 10  # Wait 10s before first check
-          periodSeconds: 10        # Check every 10 seconds
-          timeoutSeconds: 3        # Timeout after 3 seconds
-          failureThreshold: 3      # Restart after 3 failures
-        
-        # Readiness Probe: Is the container ready to serve traffic?
-        # If this fails, pod is removed from service endpoints
+            path: /          
+            port: 80         
+          initialDelaySeconds: 10  
+          periodSeconds: 10        
+          timeoutSeconds: 3        
+          failureThreshold: 3      
         readinessProbe:
           httpGet:
             path: /
             port: 80
-          initialDelaySeconds: 5   # Wait 5s before first check
-          periodSeconds: 5         # Check every 5 seconds
+          initialDelaySeconds: 5
+          periodSeconds: 5         
           timeoutSeconds: 2
           failureThreshold: 3
       
-      # ========================================================================
-      # Pod Scheduling & Affinity
-      # ========================================================================
-      # Spread pods across different nodes for high availability
       affinity:
-        podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
             podAffinityTerm:
@@ -120,30 +71,4 @@ spec:
                   - static-site
               topologyKey: kubernetes.io/hostname
       
-      # ========================================================================
-      # Restart Policy
-      # ========================================================================
-      restartPolicy: Always  # Always restart failed containers
-
----
-# ============================================================================
-# Additional Notes
-# ============================================================================
-# To deploy this file:
-#   kubectl apply -f deployment.yaml
-#
-# To check deployment status:
-#   kubectl get deployment static-site
-#   kubectl describe deployment static-site
-#
-# To check pods:
-#   kubectl get pods -l app=static-site
-#
-# To scale:
-#   kubectl scale deployment static-site --replicas=5
-#
-# To update image:
-#   kubectl set image deployment/static-site nginx=<new-image>
-#
-# To rollback:
-#   kubectl rollout undo deployment/static-site
+      restartPolicy: Always

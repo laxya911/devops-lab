@@ -1,50 +1,20 @@
-# ============================================================================
-# Kubernetes Service Configuration
-# ============================================================================
-# This file defines how to expose the static-site application
-# Services provide stable networking for pods
-
-apiVersion: v1    # API version for Service resource
-kind: Service     # Resource type
+apiVersion: v1    
+kind: Service     
 metadata:
-  name: static-site  # Service name (used for DNS)
+  name: static-site  
   labels:
     app: static-site
     phase: phase1
 spec:
-  # ============================================================================
-  # Service Type
-  # ============================================================================
-  # NodePort: Exposes service on each node's IP at a static port
-  # Accessible from outside the cluster via <NodeIP>:<NodePort>
-  # Other options: ClusterIP (internal only), LoadBalancer (cloud provider)
   type: NodePort
-  
-  # ============================================================================
-  # Selector - Which pods should receive traffic
-  # ============================================================================
-  # Service will route traffic to pods with these labels
   selector:
-    app: static-site  # Must match deployment pod labels
-  
-  # ============================================================================
-  # Port Configuration
-  # ============================================================================
+    app: static-site
   ports:
-  - name: http          # Port name (optional but good practice)
-    protocol: TCP       # Protocol (TCP or UDP)
-    port: 80            # Port exposed by the service (cluster-internal)
-    targetPort: 80      # Port on the pod to forward traffic to
-    # nodePort: 30080   # Optional: Specific NodePort (30000-32767)
-                        # If not specified, K8s assigns one automatically
-  
-  # ============================================================================
-  # Session Affinity (Optional)
-  # ============================================================================
-  # sessionAffinity: ClientIP  # Uncomment to enable sticky sessions
-  # sessionAffinityConfig:
-  #   clientIP:
-  #     timeoutSeconds: 10800  # 3 hours
+  - name: http          
+    protocol: TCP       
+    port: 80            
+    targetPort: 80      
+    nodePort: 30080   
 
 ---
 # ============================================================================

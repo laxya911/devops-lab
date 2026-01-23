@@ -146,13 +146,19 @@
         path: /etc/rancher/k3s/k3s.yaml
         mode: '0644'
 
+    - name: Update server address in central k3s.yaml
+      replace:
+        path: /etc/rancher/k3s/k3s.yaml
+        regexp: 'https://.*:6443'
+        replace: "https://{{ ansible_host }}:6443"
+
     - name: Create kubeconfig directory
       file:
         path: "{{ kubeconfig_dir }}"
         state: directory
         owner: "{{ provision_user }}"
         group: "{{ provision_user }}"
-        mode: '0700'
+        mode: '0755'
 
     - name: Copy kubeconfig to ansible user
       copy:
@@ -160,14 +166,21 @@
         dest: "{{ kubeconfig_path }}"
         owner: "{{ provision_user }}"
         group: "{{ provision_user }}"
-        mode: '0600'
+        mode: '0644'
         remote_src: yes
 
-    - name: Update kubeconfig server address to master IPv4
-      replace:
-        path: "{{ kubeconfig_path }}"
-        regexp: '127.0.0.1'
-        replace: "{{ ansible_host }}"
+    - name: Set global KUBECONFIG in /etc/environment
+      lineinfile:
+        path: /etc/environment
+        line: 'KUBECONFIG=/etc/rancher/k3s/k3s.yaml'
+        regexp: '^KUBECONFIG='
+        state: present
+
+    - name: Remove KUBECONFIG from .bashrc (redundant with /etc/environment)
+      lineinfile:
+        path: "/home/{{ provision_user }}/.bashrc"
+        regexp: '^export KUBECONFIG='
+        state: absent
 
     # ----------------------------------------------------------------------------
     # Base namespaces

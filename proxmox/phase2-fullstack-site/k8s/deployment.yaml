@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: phase2-fullstack-app
-        image: 192.168.0.33:5000/phase2-fullstack-app:latest
+        image: 192.168.0.213:5000/phase2-fullstack-app:latest
         ports:
         - containerPort: 3000
         env:

@@ -16,8 +16,7 @@ pipeline {
     // Environment Variables
     // ========================================================================
     environment {
-        // Nexus registry configuration
-        NEXUS_REGISTRY = '192.168.0.33:5000'  // Nexus Docker registry
+        NEXUS_REGISTRY = '192.168.0.213:5000'  // Nexus Docker registry
         NEXUS_REPO = 'docker-hosted'          // Repository name in Nexus
         
         // Image configuration
@@ -25,8 +24,7 @@ pipeline {
         IMAGE_TAG = "${BUILD_NUMBER}"         // Use Jenkins build number as tag
         FULL_IMAGE_NAME = "${NEXUS_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
         
-        // Kubernetes configuration
-        KUBECONFIG_CREDENTIAL_ID = 'kubeconfig'  // Jenkins credential ID
+        KUBECONFIG = '/home/ansible/.kube/config'
         K8S_NAMESPACE = 'default'                // Kubernetes namespace
         
         // Docker configuration
@@ -101,22 +99,13 @@ pipeline {
             steps {
                 echo '📤 Pushing image to Nexus registry...'
                 script {
-                    // Use Jenkins credentials for Nexus login
-                    withCredentials([usernamePassword(credentialsId: 'nexus-credentials', passwordVariable: 'NEXUS_PWD', usernameVariable: 'NEXUS_USR')]) {
-                        sh """
-                            # Login to Nexus
-                            echo "${NEXUS_PWD}" | docker login ${NEXUS_REGISTRY} -u ${NEXUS_USR} --password-stdin
-                            
-                            # Push versioned image
-                            docker push ${FULL_IMAGE_NAME}
-                            
-                            # Push latest tag
-                            docker push ${NEXUS_REGISTRY}/${IMAGE_NAME}:latest
-                            
-                            # Clean up credentials
-                            docker logout ${NEXUS_REGISTRY}
-                        """
-                    }
+                    sh """
+                        # Push versioned image
+                        docker push ${FULL_IMAGE_NAME}
+                        
+                        # Push latest tag
+                        docker push ${NEXUS_REGISTRY}/${IMAGE_NAME}:latest
+                    """
                 }
                 echo "✅ Image pushed to Nexus: ${FULL_IMAGE_NAME}"
             }

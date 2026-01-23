@@ -1,0 +1,15 @@
+---
+- name: Full Lab Deployment
+  import_playbook: playbooks/01-prepare.yml
+
+- name: K3s Master Setup
+  import_playbook: playbooks/02-k3s-master.yml
+
+- name: K3s Worker Setup
+  import_playbook: playbooks/03-k3s-worker.yml
+
+- name: Jenkins & Nexus Setup
+  import_playbook: playbooks/04-jenkins-nexus.yml
+
+- name: Validation
+  import_playbook: playbooks/99-validate.yml
