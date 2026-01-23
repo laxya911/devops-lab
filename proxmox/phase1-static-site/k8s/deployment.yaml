@@ -60,6 +60,7 @@ spec:
           failureThreshold: 3
       
       affinity:
+        podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
             podAffinityTerm:
