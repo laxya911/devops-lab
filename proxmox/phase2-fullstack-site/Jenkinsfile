@@ -1,53 +1,103 @@
+// ============================================================================
+// Jenkins Pipeline for Phase 2: Fullstack Application
+// ============================================================================
+
 pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = '192.168.0.213:5000/phase2-fullstack-app'
-        DOCKER_TAG = "${env.BUILD_NUMBER}"
-        KUBECONFIG = '/home/ansible/.kube/config'
+        NEXUS_REGISTRY = '192.168.0.213:5000'  // Nexus Docker registry
+        NEXUS_REPO     = 'docker-hosted'          // Repository name in Nexus
+        
+        // Image configuration
+        IMAGE_NAME     = 'phase2-fullstack-app'
+        IMAGE_TAG      = "${env.BUILD_NUMBER}"         // Use Jenkins build number as tag
+        FULL_IMAGE_NAME = "${env.NEXUS_REGISTRY}/${env.IMAGE_NAME}:${env.IMAGE_TAG}"
+        
+        KUBECONFIG     = '/home/ansible/.kube/config'
     }
 
     stages {
+        // ====================================================================
+        // Stage 1: Build Docker Image
+        // ====================================================================
         stage('Build Docker Image') {
             steps {
                 dir('proxmox/phase2-fullstack-site') {
-                    sh 'docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .'
-                    sh 'docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest'
+                    echo '🔨 Building fullstack application image...'
+                    sh "docker build -t ${env.FULL_IMAGE_NAME} ."
+                    sh "docker tag ${env.FULL_IMAGE_NAME} ${env.NEXUS_REGISTRY}/${env.IMAGE_NAME}:latest"
                 }
             }
         }
 
+        // ====================================================================
+        // Stage 2: Push to Nexus Registry
+        // ====================================================================
         stage('Push to Nexus Registry') {
             steps {
-                sh 'docker push ${DOCKER_IMAGE}:${DOCKER_TAG}'
-                sh 'docker push ${DOCKER_IMAGE}:latest'
+                script {
+                    echo '📤 Pushing to Nexus...'
+                    withCredentials([usernamePassword(
+                        credentialsId: 'nexus-credentials',
+                        usernameVariable: 'NEXUS_USER',
+                        passwordVariable: 'NEXUS_PASS'
+                    )]) {
+                        sh """
+                            # Login to Nexus Docker registry
+                            echo ${env.NEXUS_PASS} | docker login ${env.NEXUS_REGISTRY} -u ${env.NEXUS_USER} --password-stdin
+                            
+                            # Push versioned image
+                            docker push ${env.FULL_IMAGE_NAME}
+                            
+                            # Push latest tag
+                            docker push ${env.NEXUS_REGISTRY}/${env.IMAGE_NAME}:latest
+                            
+                            # Logout from registry
+                            docker logout ${env.NEXUS_REGISTRY}
+                        """
+                    }
+                }
             }
         }
 
+        // ====================================================================
+        // Stage 3: Deploy to Kubernetes (K3s)
+        // ====================================================================
         stage('Deploy to K3s') {
             steps {
                 dir('proxmox/phase2-fullstack-site/k8s') {
+                    echo '🚀 Deploying to K3s cluster...'
                     sh 'kubectl apply -f deployment.yaml --validate=false'
                     sh 'kubectl apply -f service.yaml --validate=false'
+                    
+                    # Update deployment with the new image
+                    sh "kubectl set image deployment/phase2-fullstack-app phase2-fullstack-app=${env.FULL_IMAGE_NAME}"
+                    
+                    # Wait for rollout to complete
                     sh 'kubectl rollout status deployment/phase2-fullstack-app'
                 }
             }
         }
 
-
+        // ====================================================================
+        // Stage 4: Cleanup
+        // ====================================================================
         stage('Cleanup') {
             steps {
-                sh 'docker rmi ${DOCKER_IMAGE}:${DOCKER_TAG} || true'
+                echo '🧹 Cleaning up local images...'
+                sh "docker rmi -f ${env.FULL_IMAGE_NAME} || true"
+                sh "docker rmi -f ${env.NEXUS_REGISTRY}/${env.IMAGE_NAME}:latest || true"
             }
         }
     }
 
     post {
         success {
-            echo 'Pipeline succeeded!'
+            echo '✅ Pipeline succeeded!'
         }
         failure {
-            echo 'Pipeline failed!'
+            echo '❌ Pipeline failed!'
         }
     }
 }
