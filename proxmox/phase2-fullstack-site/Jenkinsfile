@@ -71,10 +71,10 @@ pipeline {
                     sh 'kubectl apply -f deployment.yaml --validate=false'
                     sh 'kubectl apply -f service.yaml --validate=false'
                     
-                    # Update deployment with the new image
+                    // Update deployment with the new image
                     sh "kubectl set image deployment/phase2-fullstack-app phase2-fullstack-app=${env.FULL_IMAGE_NAME}"
                     
-                    # Wait for rollout to complete
+                    // Wait for rollout to complete
                     sh 'kubectl rollout status deployment/phase2-fullstack-app'
                 }
             }
